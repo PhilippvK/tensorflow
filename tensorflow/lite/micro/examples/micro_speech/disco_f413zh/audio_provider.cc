@@ -26,7 +26,7 @@ limitations under the License.
 namespace {
 
 bool g_is_audio_initialized = false;
-constexpr int kAudioCaptureBufferSize = kAudioSampleFrequency * 0.5;
+constexpr int kAudioCaptureBufferSize = kAudioSampleFrequency * 2;
 int16_t g_audio_capture_buffer[kAudioCaptureBufferSize];
 int16_t g_audio_output_buffer[kMaxAudioSampleSize];
 int32_t g_latest_audio_timestamp = 0;
