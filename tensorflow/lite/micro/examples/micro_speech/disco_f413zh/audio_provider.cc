@@ -79,6 +79,7 @@ TfLiteStatus InitAudioRecording(tflite::ErrorReporter* error_reporter) {
   {
     while(1);
   }
+  BSP_AUDIO_IN_SetVolume(25);
 
   g_audio_rec_buffer_state = BUFFER_OFFSET_NONE;
 
