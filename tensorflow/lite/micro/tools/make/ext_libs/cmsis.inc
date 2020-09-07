@@ -96,6 +96,7 @@ ifneq ($(filter cmsis-nn,$(ALL_TAGS)),)
       $(CMSIS_PATH)CMSIS/NN/Include/arm_nn_tables.h \
       $(CMSIS_PATH)CMSIS/NN/Include/arm_nn_types.h \
       $(CMSIS_PATH)CMSIS/DSP/Include/arm_math.h \
-      $(CMSIS_PATH)CMSIS/DSP/Include/arm_common_tables.h
+      $(CMSIS_PATH)CMSIS/DSP/Include/arm_common_tables.h \
+      $(CMSIS_PATH)CMSIS/DSP/Include/dsp/transform_functions.h
 
 endif
