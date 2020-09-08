@@ -143,7 +143,7 @@ def create_model(fingerprint_input, model_settings, model_architecture,
   elif model_architecture == 'tiny_embedding_conv':
     return create_tiny_embedding_conv_model(fingerprint_input, model_settings,
                                             is_training)
-  elif model_architecture == 'dnn'
+  elif model_architecture == 'dnn':
     if model_size_info is None:
       raise Exception('model_size_info argument is None but required for model_architecture "' + model_architecture + '"')
     return create_dnn_model(fingerprint_input, model_settings, model_size_info,
