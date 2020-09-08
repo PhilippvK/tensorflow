@@ -93,7 +93,7 @@ def prepare_model_settings(label_count, sample_rate, clip_duration_ms,
 
 
 def create_model(fingerprint_input, model_settings, model_architecture,
-                 is_training, runtime_settings=None):
+                 is_training, runtime_settings=None, model_size_info=None):
   """Builds a model of the requested architecture compatible with the settings.
 
   There are many possible ways of deriving predictions from a spectrogram
@@ -143,11 +143,48 @@ def create_model(fingerprint_input, model_settings, model_architecture,
   elif model_architecture == 'tiny_embedding_conv':
     return create_tiny_embedding_conv_model(fingerprint_input, model_settings,
                                             is_training)
+  elif model_architecture == 'dnn'
+    if model_size_info is None:
+      raise Exception('model_size_info argument is None but required for model_architecture "' + model_architecture + '"')
+    return create_dnn_model(fingerprint_input, model_settings, model_size_info,
+                              is_training)
+  elif model_architecture == 'cnn':
+    if model_size_info is None:
+      raise Exception('model_size_info argument is None but required for model_architecture "' + model_architecture + '"')
+    return create_cnn_model(fingerprint_input, model_settings, model_size_info,
+                              is_training)
+  elif model_architecture == 'basic_lstm':
+    if model_size_info is None:
+      raise Exception('model_size_info argument is None but required for model_architecture "' + model_architecture + '"')
+    return create_basic_lstm_model(fingerprint_input, model_settings,
+                                     model_size_info, is_training)
+  elif model_architecture == 'lstm':
+    if model_size_info is None:
+      raise Exception('model_size_info argument is None but required for model_architecture "' + model_architecture + '"')
+    return create_lstm_model(fingerprint_input, model_settings,
+                               model_size_info, is_training)
+  elif model_architecture == 'gru':
+    if model_size_info is None:
+      raise Exception('model_size_info argument is None but required for model_architecture "' + model_architecture + '"')
+    return create_gru_model(fingerprint_input, model_settings, model_size_info,
+                              is_training)
+  elif model_architecture == 'crnn':
+    if model_size_info is None:
+      raise Exception('model_size_info argument is None but required for model_architecture "' + model_architecture + '"')
+    return create_crnn_model(fingerprint_input, model_settings, model_size_info,
+                               is_training)
+  elif model_architecture == 'ds_cnn':
+    if model_size_info is None:
+      raise Exception('model_size_info argument is None but required for model_architecture "' + model_architecture + '"')
+    return create_ds_cnn_model(fingerprint_input, model_settings,
+                                 model_size_info, is_training)
   else:
     raise Exception('model_architecture argument "' + model_architecture +
                     '" not recognized, should be one of "single_fc", "conv",' +
                     ' "low_latency_conv, "low_latency_svdf",' +
-                    ' "tiny_conv", or "tiny_embedding_conv"')
+                    ' "tiny_conv", "tiny_embedding_conv",' +
+                    ' "dnn", "cnn", "basic_lstm", "lstm",'+
+                    ' "gru", "crnn" or "ds_cnn"')
 
 
 def load_variables_from_checkpoint(sess, start_checkpoint):
@@ -895,3 +932,604 @@ def create_tiny_embedding_conv_model(fingerprint_input, model_settings,
     return final_fc, dropout_rate
   else:
     return final_fc
+
+def create_dnn_model(fingerprint_input, model_settings, model_size_info,
+                       is_training):
+  """Builds a model with multiple hidden fully-connected layers.
+  model_size_info: length of the array defines the number of hidden-layers and
+                   each element in the array represent the number of neurons
+                   in that layer
+  """
+
+  if is_training:
+    dropout_rate = tf.compat.v1.placeholder(tf.float32, name='dropout_rate')
+  fingerprint_size = model_settings['fingerprint_size']
+  label_count = model_settings['label_count']
+  num_layers = len(model_size_info)
+  layer_dim = [fingerprint_size]
+  layer_dim.extend(model_size_info)
+  flow = fingerprint_input
+  tf.summary.histogram('input', flow)
+  for i in range(1, num_layers + 1):
+      with tf.variable_scope('fc'+str(i)):
+          W = tf.get_variable('W', shape=[layer_dim[i-1], layer_dim[i]],
+                initializer=tf.contrib.layers.xavier_initializer())
+          tf.summary.histogram('fc_'+str(i)+'_w', W)
+          b = tf.get_variable('b', shape=[layer_dim[i]])
+          tf.summary.histogram('fc_'+str(i)+'_b', b)
+          flow = tf.matmul(flow, W) + b
+          flow = tf.nn.relu(flow)
+          if is_training:
+            flow = tf.nn.dropout(flow, dropout_rate)
+
+  weights = tf.get_variable('final_fc', shape=[layer_dim[-1], label_count],
+              initializer=tf.contrib.layers.xavier_initializer())
+  bias = tf.compat.v1.get_variable(name='bias',
+                                   initializer=tf.compat.v2.zeros_initializer,
+                                   shape=[label_count])
+  logits = tf.matmul(flow, weights) + bias
+  if is_training:
+    return logits, dropout_rate
+  else:
+    return logits
+
+def create_cnn_model(fingerprint_input, model_settings, model_size_info,
+                       is_training):
+  """Builds a model with 2 convolution layers followed by a linear layer and
+      a hidden fully-connected layer.
+  model_size_info: defines the first and second convolution parameters in
+      {number of conv features, conv filter height, width, stride in y,x dir.},
+      followed by linear layer size and fully-connected layer size.
+  """
+  if is_training:
+    dropout_rate = tf.compat.v1.placeholder(tf.float32, name='dropout_rate')
+  input_frequency_size = model_settings['fingerprint_width']
+  input_time_size = model_settings['spectrogram_length']
+  fingerprint_4d = tf.reshape(fingerprint_input,
+                              [-1, input_time_size, input_frequency_size, 1])
+
+  first_filter_count = model_size_info[0]
+  first_filter_height = model_size_info[1]   #time axis
+  first_filter_width = model_size_info[2]    #frequency axis
+  first_filter_stride_y = model_size_info[3] #time axis
+  first_filter_stride_x = model_size_info[4] #frequency_axis
+
+  second_filter_count = model_size_info[5]
+  second_filter_height = model_size_info[6]   #time axis
+  second_filter_width = model_size_info[7]    #frequency axis
+  second_filter_stride_y = model_size_info[8] #time axis
+  second_filter_stride_x = model_size_info[9] #frequency_axis
+
+  linear_layer_size = model_size_info[10]
+  fc_size = model_size_info[11]
+
+  # first conv
+  first_weights = tf.compat.v1.get_variable(
+      name='first_weights',
+      initializer=tf.compat.v1.truncated_normal_initializer(stddev=0.01),
+      shape=[first_filter_height, first_filter_width, 1, first_filter_count])
+  first_bias = tf.compat.v1.get_variable(name='first_bias',
+                                   initializer=tf.compat.v2.zeros_initializer,
+                                   shape=[first_filter_count])
+  first_conv = tf.nn.conv2d(fingerprint_4d, first_weights, [
+      1, first_filter_stride_y, first_filter_stride_x, 1
+  ], 'VALID') + first_bias
+  first_conv = tf.layers.batch_normalization(first_conv, training=is_training,
+                 name='bn1')
+  first_relu = tf.nn.relu(first_conv)
+  if is_training:
+    first_dropout = tf.nn.dropout(first_relu, dropout_rate)
+  else:
+    first_dropout = first_relu
+  first_conv_output_width = math.ceil(
+      (input_frequency_size - first_filter_width + 1) /
+      first_filter_stride_x)
+  first_conv_output_height = math.ceil(
+      (input_time_size - first_filter_height + 1) /
+      first_filter_stride_y)
+
+  # second conv
+  second_weights = tf.compat.v1.get_variable(
+      name='second_weights',
+      initializer=tf.compat.v1.truncated_normal_initializer(stddev=0.01),
+      shape=[second_filter_height, second_filter_width, first_filter_count, second_filter_count])
+  second_bias = tf.compat.v1.get_variable(name='second_bias',
+                                          initializer=tf.compat.v2.zeros_initializer,
+                                          shape=[second_filter_count])
+  second_conv = tf.nn.conv2d(first_dropout, second_weights, [
+      1, second_filter_stride_y, second_filter_stride_x, 1
+  ], 'VALID') + second_bias
+  second_conv = tf.layers.batch_normalization(second_conv, training=is_training,
+                  name='bn2')
+  second_relu = tf.nn.relu(second_conv)
+  if is_training:
+    second_dropout = tf.nn.dropout(second_relu, dropout_rate)
+  else:
+    second_dropout = second_relu
+  second_conv_output_width = math.ceil(
+      (first_conv_output_width - second_filter_width + 1) /
+      second_filter_stride_x)
+  second_conv_output_height = math.ceil(
+      (first_conv_output_height - second_filter_height + 1) /
+      second_filter_stride_y)
+
+  second_conv_element_count = int(
+      second_conv_output_width*second_conv_output_height*second_filter_count)
+  flattened_second_conv = tf.reshape(second_dropout,
+                                    [-1, second_conv_element_count])
+
+  # linear layer
+  W = tf.get_variable('W', shape=[second_conv_element_count, linear_layer_size],
+        initializer=tf.contrib.layers.xavier_initializer())
+  b = tf.get_variable('b', shape=[linear_layer_size])
+  flow = tf.matmul(flattened_second_conv, W) + b
+
+  # first fc
+  first_fc_output_channels = fc_size
+  first_fc_weights = tf.compat.v1.get_variable(
+      name='first_fc_weights',
+      initializer=tf.compat.v1.truncated_normal_initializer(stddev=0.01),
+      shape=[linear_layer_size, first_fc_output_channels])
+  first_fc_bias = tf.compat.v1.get_variable(name='first_fc_bias',
+                                            initializer=tf.compat.v2.zeros_initializer,
+                                            shape=[first_fc_output_channels])
+  first_fc = tf.matmul(flow, first_fc_weights) + first_fc_bias
+  first_fc = tf.layers.batch_normalization(first_fc, training=is_training,
+               name='bn3')
+  first_fc = tf.nn.relu(first_fc)
+  if is_training:
+    final_fc_input = tf.nn.dropout(first_fc, dropout_rate)
+  else:
+    final_fc_input = first_fc
+  label_count = model_settings['label_count']
+  final_fc_weights = tf.compat.v1.get_variable(
+      name='final_fc_weights',
+      initializer=tf.compat.v1.truncated_normal_initializer(stddev=0.01),
+      shape=[first_fc_output_channels, label_count])
+  final_fc_bias = tf.compat.v1.get_variable(name='final_fc_bias',
+                                            initializer=tf.compat.v2.zeros_initializer,
+                                            shape=[label_count])
+  final_fc = tf.matmul(final_fc_input, final_fc_weights) + final_fc_bias
+  if is_training:
+    return final_fc, dropout_rate
+  else:
+    return final_fc
+
+
+def create_basic_lstm_model(fingerprint_input, model_settings, model_size_info,
+                              is_training):
+  """Builds a model with a basic lstm layer (without output projection and
+       peep-hole connections)
+  model_size_info: defines the number of memory cells in basic lstm model
+  """
+  if is_training:
+    dropout_rate = tf.compat.v1.placeholder(tf.float32, name='dropout_rate')
+  input_frequency_size = model_settings['fingerprint_width']
+  input_time_size = model_settings['spectrogram_length']
+  fingerprint_4d = tf.reshape(fingerprint_input,
+                              [-1, input_time_size, input_frequency_size])
+
+  num_classes = model_settings['label_count']
+
+  if type(model_size_info) is list:
+    LSTM_units = model_size_info[0]
+  else:
+    LSTM_units = model_size_info
+
+  with tf.name_scope('LSTM-Layer'):
+    with tf.variable_scope("lstm"):
+      lstmcell = tf.contrib.rnn.BasicLSTMCell(LSTM_units, forget_bias=1.0,
+                   state_is_tuple=True)
+      _, last = tf.nn.dynamic_rnn(cell=lstmcell, inputs=fingerprint_4d,
+                  dtype=tf.float32)
+      flow = last[-1]
+
+  with tf.name_scope('Output-Layer'):
+    W_o = tf.get_variable('W_o', shape=[LSTM_units, num_classes],
+            initializer=tf.contrib.layers.xavier_initializer())
+    b_o = tf.get_variable('b_o', shape=[num_classes])
+    logits = tf.matmul(flow, W_o) + b_o
+
+  if is_training:
+    return logits, dropout_rate
+  else:
+    return logits
+
+def create_lstm_model(fingerprint_input, model_settings, model_size_info,
+                        is_training):
+  """Builds a model with a lstm layer (with output projection layer and
+       peep-hole connections)
+  Based on model described in https://arxiv.org/abs/1705.02411
+  model_size_info: [projection size, memory cells in LSTM]
+  """
+  if is_training:
+    dropout_rate = tf.compat.v1.placeholder(tf.float32, name='dropout_rate')
+  input_frequency_size = model_settings['fingerprint_width']
+  input_time_size = model_settings['spectrogram_length']
+  fingerprint_4d = tf.reshape(fingerprint_input,
+                              [-1, input_time_size, input_frequency_size])
+
+  num_classes = model_settings['label_count']
+  projection_units = model_size_info[0]
+  LSTM_units = model_size_info[1]
+  with tf.name_scope('LSTM-Layer'):
+    with tf.variable_scope("lstm"):
+      lstmcell = tf.contrib.rnn.LSTMCell(LSTM_units, use_peepholes=True,
+                   num_proj=projection_units)
+      _, last = tf.nn.dynamic_rnn(cell=lstmcell, inputs=fingerprint_4d,
+                  dtype=tf.float32)
+      flow = last[-1]
+
+  with tf.name_scope('Output-Layer'):
+    W_o = tf.get_variable('W_o', shape=[projection_units, num_classes],
+            initializer=tf.contrib.layers.xavier_initializer())
+    b_o = tf.get_variable('b_o', shape=[num_classes])
+    logits = tf.matmul(flow, W_o) + b_o
+
+  if is_training:
+    return logits, dropout_rate
+  else:
+    return logits
+
+class LayerNormGRUCell(rnn_cell_impl.RNNCell):
+
+  def __init__(self, num_units, forget_bias=1.0,
+               input_size=None, activation=math_ops.tanh,
+               layer_norm=True, norm_gain=1.0, norm_shift=0.0,
+               dropout_keep_prob=1.0, dropout_rate=None,
+               reuse=None):
+
+    super(LayerNormGRUCell, self).__init__(_reuse=reuse)
+
+    if input_size is not None:
+      tf.logging.info("%s: The input_size parameter is deprecated.", self)
+
+    self._num_units = num_units
+    self._activation = activation
+    self._forget_bias = forget_bias
+    self._keep_prob = dropout_keep_prob
+    self._seed = dropout_rate_seed
+    self._layer_norm = layer_norm
+    self._g = norm_gain
+    self._b = norm_shift
+    self._reuse = reuse
+
+  @property
+  def state_size(self):
+    return self._num_units
+
+  @property
+  def output_size(self):
+    return self._num_units
+
+  def _norm(self, inp, scope):
+    shape = inp.get_shape()[-1:]
+    gamma_init = init_ops.constant_initializer(self._g)
+    beta_init = init_ops.constant_initializer(self._b)
+    with vs.variable_scope(scope):
+      # Initialize beta and gamma for use by layer_norm.
+      vs.get_variable("gamma", shape=shape, initializer=gamma_init)
+      vs.get_variable("beta", shape=shape, initializer=beta_init)
+    normalized = layers.layer_norm(inp, reuse=True, scope=scope)
+    return normalized
+
+  def _linear(self, args, copy):
+    out_size = copy * self._num_units
+    proj_size = args.get_shape()[-1]
+    weights = vs.get_variable("kernel", [proj_size, out_size])
+    out = math_ops.matmul(args, weights)
+    if not self._layer_norm:
+      bias = vs.get_variable("bias", [out_size])
+      out = nn_ops.bias_add(out, bias)
+    return out
+
+  def call(self, inputs, state):
+    """LSTM cell with layer normalization and recurrent dropout."""
+    with vs.variable_scope("gates"):
+      h = state
+      args = array_ops.concat([inputs, h], 1)
+      concat = self._linear(args, 2)
+
+      z, r = array_ops.split(value=concat, num_or_size_splits=2, axis=1)
+      if self._layer_norm:
+        z = self._norm(z, "update")
+        r = self._norm(r, "reset")
+
+    with vs.variable_scope("candidate"):
+      args = array_ops.concat([inputs, math_ops.sigmoid(r) * h], 1)
+      new_c = self._linear(args, 1)
+      if self._layer_norm:
+        new_c = self._norm(new_c, "state")
+    new_h = self._activation(new_c) * math_ops.sigmoid(z) + \
+              (1 - math_ops.sigmoid(z)) * h
+    return new_h, new_h
+
+def create_gru_model(fingerprint_input, model_settings, model_size_info,
+                       is_training):
+  """Builds a model with multi-layer GRUs
+  model_size_info: [number of GRU layers, number of GRU cells per layer]
+  Optionally, the bi-directional GRUs and/or GRU with layer-normalization
+    can be explored.
+  """
+  if is_training:
+    dropout_rate = tf.compat.v1.placeholder(tf.float32, name='dropout_rate')
+  input_frequency_size = model_settings['fingerprint_width']
+  input_time_size = model_settings['spectrogram_length']
+  fingerprint_4d = tf.reshape(fingerprint_input,
+                              [-1, input_time_size, input_frequency_size])
+
+  num_classes = model_settings['label_count']
+
+  layer_norm = False
+  bidirectional = False
+
+  num_layers = model_size_info[0]
+  gru_units = model_size_info[1]
+
+  gru_cell_fw = []
+  gru_cell_bw = []
+  if layer_norm:
+    for i in range(num_layers):
+      gru_cell_fw.append(LayerNormGRUCell(gru_units))
+      if bidirectional:
+        gru_cell_bw.append(LayerNormGRUCell(gru_units))
+  else:
+    for i in range(num_layers):
+      gru_cell_fw.append(tf.contrib.rnn.GRUCell(gru_units))
+      if bidirectional:
+        gru_cell_bw.append(tf.contrib.rnn.GRUCell(gru_units))
+
+  if bidirectional:
+    outputs, output_state_fw, output_state_bw = \
+      tf.contrib.rnn.stack_bidirectional_dynamic_rnn(gru_cell_fw, gru_cell_bw,
+      fingerprint_4d, dtype=tf.float32)
+    flow = outputs[:, -1, :]
+  else:
+    cells = tf.contrib.rnn.MultiRNNCell(gru_cell_fw)
+    _, last = tf.nn.dynamic_rnn(cell=cells, inputs=fingerprint_4d,
+                dtype=tf.float32)
+    flow = last[-1]
+
+  with tf.name_scope('Output-Layer'):
+    W_o = tf.get_variable('W_o', shape=[flow.get_shape()[-1], num_classes],
+            initializer=tf.contrib.layers.xavier_initializer())
+    b_o = tf.get_variable('b_o', shape=[num_classes])
+    logits = tf.matmul(flow, W_o) + b_o
+
+  if is_training:
+    return logits, dropout_rate
+  else:
+    return logits
+
+
+def create_crnn_model(fingerprint_input, model_settings,
+                                  model_size_info, is_training):
+  """Builds a model with convolutional recurrent networks with GRUs
+  Based on the model definition in https://arxiv.org/abs/1703.05390
+  model_size_info: defines the following convolution layer parameters
+      {number of conv features, conv filter height, width, stride in y,x dir.},
+      followed by number of GRU layers and number of GRU cells per layer
+  Optionally, the bi-directional GRUs and/or GRU with layer-normalization
+    can be explored.
+  """
+  if is_training:
+    dropout_rate = tf.compat.v1.placeholder(tf.float32, name='dropout_rate')
+  input_frequency_size = model_settings['fingerprint_width']
+  input_time_size = model_settings['spectrogram_length']
+  fingerprint_4d = tf.reshape(fingerprint_input,
+                              [-1, input_time_size, input_frequency_size, 1])
+
+  layer_norm = False
+  bidirectional = False
+
+  # CNN part
+  first_filter_count = model_size_info[0]
+  first_filter_height = model_size_info[1]
+  first_filter_width = model_size_info[2]
+  first_filter_stride_y = model_size_info[3]
+  first_filter_stride_x = model_size_info[4]
+
+  first_weights = tf.get_variable('W', shape=[first_filter_height,
+                    first_filter_width, 1, first_filter_count],
+    initializer=tf.contrib.layers.xavier_initializer())
+
+  first_bias = tf.compat.v1.get_variable(
+      name='first_bias',
+      initializer=tf.compat.v1.zeros_initializer,
+      shape=[first_filter_count])
+  first_conv = tf.nn.conv2d(fingerprint_4d, first_weights, [
+      1, first_filter_stride_y, first_filter_stride_x, 1
+  ], 'VALID') + first_bias
+  first_relu = tf.nn.relu(first_conv)
+  if is_training:
+    first_dropout = tf.nn.dropout(first_relu, dropout_rate)
+  else:
+    first_dropout = first_relu
+  first_conv_output_width = int(math.floor(
+      (input_frequency_size - first_filter_width + first_filter_stride_x) /
+      first_filter_stride_x))
+  first_conv_output_height = int(math.floor(
+      (input_time_size - first_filter_height + first_filter_stride_y) /
+      first_filter_stride_y))
+
+  # GRU part
+  num_rnn_layers = model_size_info[5]
+  RNN_units = model_size_info[6]
+  flow = tf.reshape(first_dropout, [-1, first_conv_output_height,
+           first_conv_output_width * first_filter_count])
+  cell_fw = []
+  cell_bw = []
+  if layer_norm:
+    for i in range(num_rnn_layers):
+      cell_fw.append(LayerNormGRUCell(RNN_units))
+      if bidirectional:
+        cell_bw.append(LayerNormGRUCell(RNN_units))
+  else:
+    for i in range(num_rnn_layers):
+      cell_fw.append(tf.contrib.rnn.GRUCell(RNN_units))
+      if bidirectional:
+        cell_bw.append(tf.contrib.rnn.GRUCell(RNN_units))
+
+  if bidirectional:
+    outputs, output_state_fw, output_state_bw = \
+      tf.contrib.rnn.stack_bidirectional_dynamic_rnn(cell_fw, cell_bw, flow,
+      dtype=tf.float32)
+    flow_dim = first_conv_output_height*RNN_units*2
+    flow = tf.reshape(outputs, [-1, flow_dim])
+  else:
+    cells = tf.contrib.rnn.MultiRNNCell(cell_fw)
+    _, last = tf.nn.dynamic_rnn(cell=cells, inputs=flow, dtype=tf.float32)
+    flow_dim = RNN_units
+    flow = last[-1]
+
+  first_fc_output_channels = model_size_info[7]
+
+  first_fc_weights = tf.get_variable('fcw', shape=[flow_dim,
+    first_fc_output_channels],
+    initializer=tf.contrib.layers.xavier_initializer())
+
+  first_fc_bias = tf.compat.v1.get_variable(
+      name='first_fc_bias',
+      initializer=tf.compat.v1.zeros_initializer,
+      shape=[first_fc_output_channels])
+  first_fc = tf.nn.relu(tf.matmul(flow, first_fc_weights) + first_fc_bias)
+  if is_training:
+    final_fc_input = tf.nn.dropout(first_fc, dropout_rate)
+  else:
+    final_fc_input = first_fc
+
+  label_count = model_settings['label_count']
+
+  final_fc_weights = tf.compat.v1.get_variable(
+      name='final_fc_weights',
+      initializer=tf.compat.v1.truncated_normal_initializer(stddev=0.01),
+      shape=[first_fc_output_channels, label_count])
+
+  final_fc_bias = tf.compat.v1.get_variable(
+      name='final_fc_bias',
+      initializer=tf.compat.v1.zeros_initializer,
+      shape=[label_count])
+  final_fc = tf.matmul(final_fc_input, final_fc_weights) + final_fc_bias
+  if is_training:
+    return final_fc, dropout_rate
+  else:
+    return final_fc
+
+def create_ds_cnn_model(fingerprint_input, model_settings, model_size_info,
+                          is_training):
+  """Builds a model with depthwise separable convolutional neural network
+  Model definition is based on https://arxiv.org/abs/1704.04861 and
+  Tensorflow implementation: https://github.com/Zehaos/MobileNet
+
+  model_size_info: defines number of layers, followed by the DS-Conv layer
+    parameters in the order {number of conv features, conv filter height,
+    width and stride in y,x dir.} for each of the layers.
+  Note that first layer is always regular convolution, but the remaining
+    layers are all depthwise separable convolutions.
+  """
+
+  def ds_cnn_arg_scope(weight_decay=0):
+    """Defines the default ds_cnn argument scope.
+    Args:
+      weight_decay: The weight decay to use for regularizing the model.
+    Returns:
+      An `arg_scope` to use for the DS-CNN model.
+    """
+    with slim.arg_scope(
+        [slim.convolution2d, slim.separable_convolution2d],
+        weights_initializer=slim.initializers.xavier_initializer(),
+        biases_initializer=slim.init_ops.zeros_initializer(),
+        weights_regularizer=slim.l2_regularizer(weight_decay)) as sc:
+      return sc
+
+  def _depthwise_separable_conv(inputs,
+                                num_pwc_filters,
+                                sc,
+                                kernel_size,
+                                stride):
+    """ Helper function to build the depth-wise separable convolution layer.
+    """
+
+    # skip pointwise by setting num_outputs=None
+    depthwise_conv = slim.separable_convolution2d(inputs,
+                                                  num_outputs=None,
+                                                  stride=stride,
+                                                  depth_multiplier=1,
+                                                  kernel_size=kernel_size,
+                                                  scope=sc+'/dw_conv')
+
+    bn = slim.batch_norm(depthwise_conv, scope=sc+'/dw_conv/batch_norm')
+    pointwise_conv = slim.convolution2d(bn,
+                                        num_pwc_filters,
+                                        kernel_size=[1, 1],
+                                        scope=sc+'/pw_conv')
+    bn = slim.batch_norm(pointwise_conv, scope=sc+'/pw_conv/batch_norm')
+    return bn
+
+
+  if is_training:
+    dropout_rate = tf.compat.v1.placeholder(tf.float32, name='dropout_rate')
+
+  label_count = model_settings['label_count']
+  input_frequency_size = model_settings['fingerprint_width']
+  input_time_size = model_settings['spectrogram_length']
+  fingerprint_4d = tf.reshape(fingerprint_input,
+                              [-1, input_time_size, input_frequency_size, 1])
+
+  t_dim = input_time_size
+  f_dim = input_frequency_size
+
+  #Extract model dimensions from model_size_info
+  num_layers = model_size_info[0]
+  conv_feat = [None]*num_layers
+  conv_kt = [None]*num_layers
+  conv_kf = [None]*num_layers
+  conv_st = [None]*num_layers
+  conv_sf = [None]*num_layers
+  i=1
+  for layer_no in range(0,num_layers):
+    conv_feat[layer_no] = model_size_info[i]
+    i += 1
+    conv_kt[layer_no] = model_size_info[i]
+    i += 1
+    conv_kf[layer_no] = model_size_info[i]
+    i += 1
+    conv_st[layer_no] = model_size_info[i]
+    i += 1
+    conv_sf[layer_no] = model_size_info[i]
+    i += 1
+
+  scope = 'DS-CNN'
+  with tf.variable_scope(scope) as sc:
+    end_points_collection = sc.name + '_end_points'
+    with slim.arg_scope([slim.convolution2d, slim.separable_convolution2d],
+                        activation_fn=None,
+                        weights_initializer=slim.initializers.xavier_initializer(),
+                        biases_initializer=slim.init_ops.zeros_initializer(),
+                        outputs_collections=[end_points_collection]):
+      with slim.arg_scope([slim.batch_norm],
+                          is_training=is_training,
+                          decay=0.96,
+                          updates_collections=None,
+                          activation_fn=tf.nn.relu):
+        for layer_no in range(0,num_layers):
+          if layer_no==0:
+            net = slim.convolution2d(fingerprint_4d, conv_feat[layer_no],\
+                      [conv_kt[layer_no], conv_kf[layer_no]], stride=[conv_st[layer_no], conv_sf[layer_no]], padding='SAME', scope='conv_1')
+            net = slim.batch_norm(net, scope='conv_1/batch_norm')
+          else:
+            net = _depthwise_separable_conv(net, conv_feat[layer_no], \
+                      kernel_size = [conv_kt[layer_no],conv_kf[layer_no]], \
+                      stride = [conv_st[layer_no],conv_sf[layer_no]], sc='conv_ds_'+str(layer_no))
+          t_dim = math.ceil(t_dim/float(conv_st[layer_no]))
+          f_dim = math.ceil(f_dim/float(conv_sf[layer_no]))
+
+        net = slim.avg_pool2d(net, [t_dim, f_dim], scope='avg_pool')
+
+    net = tf.squeeze(net, [1, 2], name='SpatialSqueeze')
+    logits = slim.fully_connected(net, label_count, activation_fn=None, scope='fc1')
+
+  if is_training:
+    return logits, dropout_rate
+  else:
+    return logits
