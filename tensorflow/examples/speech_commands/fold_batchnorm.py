@@ -49,15 +49,15 @@ def fold_batch_norm(wanted_words, sample_rate, clip_duration_ms,
     model_architecture: Name of the kind of model to generate.
   """
   
-  tf.logging.set_verbosity(tf.logging.INFO)
-  sess = tf.InteractiveSession()
+  tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
+  sess = tf.compat.v1.InteractiveSession()
   words_list = input_data.prepare_words_list(wanted_words.split(','))
   model_settings = models.prepare_model_settings(
       len(words_list), sample_rate, clip_duration_ms, window_size_ms,
       window_stride_ms, dct_coefficient_count)
 
  
-  fingerprint_input = tf.placeholder(
+  fingerprint_input = tf.compat.v1.placeholder(
       tf.float32, [None, model_settings['fingerprint_size']], name='fingerprint_input')
 
   logits = models.create_model(
@@ -67,42 +67,42 @@ def fold_batch_norm(wanted_words, sample_rate, clip_duration_ms,
       FLAGS.model_size_info,
       is_training=False)
 
-  ground_truth_input = tf.placeholder(
+  ground_truth_input = tf.compat.v1.placeholder(
       tf.float32, [None, model_settings['label_count']], name='groundtruth_input')
 
-  predicted_indices = tf.argmax(logits, 1)
-  expected_indices = tf.argmax(ground_truth_input, 1)
+  predicted_indices = tf.argmax(input=logits, axis=1)
+  expected_indices = tf.argmax(input=ground_truth_input, axis=1)
   correct_prediction = tf.equal(predicted_indices, expected_indices)
-  confusion_matrix = tf.confusion_matrix(expected_indices, predicted_indices)
-  evaluation_step = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+  confusion_matrix = tf.math.confusion_matrix(labels=expected_indices, predictions=predicted_indices)
+  evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction, tf.float32))
 
   models.load_variables_from_checkpoint(sess, FLAGS.checkpoint)
-  saver = tf.train.Saver(tf.global_variables())
+  saver = tf.compat.v1.train.Saver(tf.compat.v1.global_variables())
 
-  tf.logging.info('Folding batch normalization layer parameters to preceding layer weights/biases')
+  tf.compat.v1.logging.info('Folding batch normalization layer parameters to preceding layer weights/biases')
   #epsilon added to variance to avoid division by zero
   epsilon  = 1e-3 #default epsilon for tf.slim.batch_norm 
   #get batch_norm mean
-  mean_variables = [v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if 'moving_mean' in v.name]
+  mean_variables = [v for v in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES) if 'moving_mean' in v.name]
   for mean_var in mean_variables:
     mean_name = mean_var.name
     mean_values = sess.run(mean_var)
     variance_name = mean_name.replace('moving_mean','moving_variance')
-    variance_var = [v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if v.name == variance_name][0]
+    variance_var = [v for v in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES) if v.name == variance_name][0]
     variance_values = sess.run(variance_var)
     beta_name = mean_name.replace('moving_mean','beta')
-    beta_var = [v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if v.name == beta_name][0]
+    beta_var = [v for v in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES) if v.name == beta_name][0]
     beta_values = sess.run(beta_var)
     bias_name = mean_name.replace('batch_norm/moving_mean','biases')
-    bias_var = [v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if v.name == bias_name][0]
+    bias_var = [v for v in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES) if v.name == bias_name][0]
     bias_values = sess.run(bias_var)
     wt_name = mean_name.replace('batch_norm/moving_mean:0','')
-    wt_var = [v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if (wt_name in v.name and 'weights' in v.name)][0]
+    wt_var = [v for v in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES) if (wt_name in v.name and 'weights' in v.name)][0]
     wt_values = sess.run(wt_var)
     wt_name = wt_var.name
 
     #Update weights
-    tf.logging.info('Updating '+wt_name)
+    tf.compat.v1.logging.info('Updating '+wt_name)
     for l in range(wt_values.shape[3]):
       for k in range(wt_values.shape[2]):
         for j in range(wt_values.shape[1]):
@@ -111,19 +111,19 @@ def fold_batch_norm(wanted_words, sample_rate, clip_duration_ms,
               wt_values[i][j][k][l] *= 1.0/np.sqrt(variance_values[k]+epsilon) #gamma (scale factor) is 1.0
             else:
               wt_values[i][j][k][l] *= 1.0/np.sqrt(variance_values[l]+epsilon) #gamma (scale factor) is 1.0
-    wt_values = sess.run(tf.assign(wt_var,wt_values))
+    wt_values = sess.run(tf.compat.v1.assign(wt_var,wt_values))
     #Update biases
-    tf.logging.info('Updating '+bias_name)
+    tf.compat.v1.logging.info('Updating '+bias_name)
     if "depthwise" in wt_name:
       depth_dim = wt_values.shape[2]
     else:
       depth_dim = wt_values.shape[3]
     for l in range(depth_dim):
       bias_values[l] = (1.0*(bias_values[l]-mean_values[l])/np.sqrt(variance_values[l]+epsilon)) + beta_values[l]
-    bias_values = sess.run(tf.assign(bias_var,bias_values))
+    bias_values = sess.run(tf.compat.v1.assign(bias_var,bias_values))
     
   #Write fused weights to ckpt file
-  tf.logging.info('Saving new checkpoint at '+FLAGS.checkpoint+'_bnfused')
+  tf.compat.v1.logging.info('Saving new checkpoint at '+FLAGS.checkpoint+'_bnfused')
   saver.save(sess, FLAGS.checkpoint+'_bnfused')
 
 def main(_):
@@ -228,4 +228,4 @@ if __name__ == '__main__':
       help='Model dimensions - different for various models')
 
   FLAGS, unparsed = parser.parse_known_args()
-  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+  tf.compat.v1.app.run(main=main, argv=[sys.argv[0]] + unparsed)

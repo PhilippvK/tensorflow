@@ -955,21 +955,21 @@ def create_dnn_model(fingerprint_input, model_settings, model_size_info,
   layer_dim = [fingerprint_size]
   layer_dim.extend(model_size_info)
   flow = fingerprint_input
-  tf.summary.histogram('input', flow)
+  tf.compat.v1.summary.histogram('input', flow)
   for i in range(1, num_layers + 1):
-      with tf.variable_scope('fc'+str(i)):
-          W = tf.get_variable('W', shape=[layer_dim[i-1], layer_dim[i]],
-                initializer=tf.contrib.layers.xavier_initializer())
-          tf.summary.histogram('fc_'+str(i)+'_w', W)
-          b = tf.get_variable('b', shape=[layer_dim[i]])
-          tf.summary.histogram('fc_'+str(i)+'_b', b)
+      with tf.compat.v1.variable_scope('fc'+str(i)):
+          W = tf.compat.v1.get_variable('W', shape=[layer_dim[i-1], layer_dim[i]],
+                initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
+          tf.compat.v1.summary.histogram('fc_'+str(i)+'_w', W)
+          b = tf.compat.v1.get_variable('b', shape=[layer_dim[i]])
+          tf.compat.v1.summary.histogram('fc_'+str(i)+'_b', b)
           flow = tf.matmul(flow, W) + b
           flow = tf.nn.relu(flow)
           if is_training:
-            flow = tf.nn.dropout(flow, dropout_rate)
+            flow = tf.nn.dropout(flow, 1 - (dropout_rate))
 
-  weights = tf.get_variable('final_fc', shape=[layer_dim[-1], label_count],
-              initializer=tf.contrib.layers.xavier_initializer())
+  weights = tf.compat.v1.get_variable('final_fc', shape=[layer_dim[-1], label_count],
+              initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
   bias = tf.compat.v1.get_variable(name='bias',
                                    initializer=tf.compat.v2.zeros_initializer,
                                    shape=[label_count])
@@ -1017,14 +1017,14 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
   first_bias = tf.compat.v1.get_variable(name='first_bias',
                                    initializer=tf.compat.v2.zeros_initializer,
                                    shape=[first_filter_count])
-  first_conv = tf.nn.conv2d(fingerprint_4d, first_weights, [
+  first_conv = tf.nn.conv2d(input=fingerprint_4d, filters=first_weights, strides=[
       1, first_filter_stride_y, first_filter_stride_x, 1
-  ], 'VALID') + first_bias
-  first_conv = tf.layers.batch_normalization(first_conv, training=is_training,
+  ], padding='VALID') + first_bias
+  first_conv = tf.compat.v1.layers.batch_normalization(first_conv, training=is_training,
                  name='bn1')
   first_relu = tf.nn.relu(first_conv)
   if is_training:
-    first_dropout = tf.nn.dropout(first_relu, dropout_rate)
+    first_dropout = tf.nn.dropout(first_relu, 1 - (dropout_rate))
   else:
     first_dropout = first_relu
   first_conv_output_width = math.ceil(
@@ -1042,14 +1042,14 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
   second_bias = tf.compat.v1.get_variable(name='second_bias',
                                           initializer=tf.compat.v2.zeros_initializer,
                                           shape=[second_filter_count])
-  second_conv = tf.nn.conv2d(first_dropout, second_weights, [
+  second_conv = tf.nn.conv2d(input=first_dropout, filters=second_weights, strides=[
       1, second_filter_stride_y, second_filter_stride_x, 1
-  ], 'VALID') + second_bias
-  second_conv = tf.layers.batch_normalization(second_conv, training=is_training,
+  ], padding='VALID') + second_bias
+  second_conv = tf.compat.v1.layers.batch_normalization(second_conv, training=is_training,
                   name='bn2')
   second_relu = tf.nn.relu(second_conv)
   if is_training:
-    second_dropout = tf.nn.dropout(second_relu, dropout_rate)
+    second_dropout = tf.nn.dropout(second_relu, 1 - (dropout_rate))
   else:
     second_dropout = second_relu
   second_conv_output_width = math.ceil(
@@ -1065,9 +1065,9 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
                                     [-1, second_conv_element_count])
 
   # linear layer
-  W = tf.get_variable('W', shape=[second_conv_element_count, linear_layer_size],
-        initializer=tf.contrib.layers.xavier_initializer())
-  b = tf.get_variable('b', shape=[linear_layer_size])
+  W = tf.compat.v1.get_variable('W', shape=[second_conv_element_count, linear_layer_size],
+        initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
+  b = tf.compat.v1.get_variable('b', shape=[linear_layer_size])
   flow = tf.matmul(flattened_second_conv, W) + b
 
   # first fc
@@ -1080,11 +1080,11 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
                                             initializer=tf.compat.v2.zeros_initializer,
                                             shape=[first_fc_output_channels])
   first_fc = tf.matmul(flow, first_fc_weights) + first_fc_bias
-  first_fc = tf.layers.batch_normalization(first_fc, training=is_training,
+  first_fc = tf.compat.v1.layers.batch_normalization(first_fc, training=is_training,
                name='bn3')
   first_fc = tf.nn.relu(first_fc)
   if is_training:
-    final_fc_input = tf.nn.dropout(first_fc, dropout_rate)
+    final_fc_input = tf.nn.dropout(first_fc, 1 - (dropout_rate))
   else:
     final_fc_input = first_fc
   label_count = model_settings['label_count']
@@ -1122,18 +1122,18 @@ def create_basic_lstm_model(fingerprint_input, model_settings, model_size_info,
   else:
     LSTM_units = model_size_info
 
-  with tf.name_scope('LSTM-Layer'):
-    with tf.variable_scope("lstm"):
-      lstmcell = tf.contrib.rnn.BasicLSTMCell(LSTM_units, forget_bias=1.0,
+  with tf.compat.v1.name_scope('LSTM-Layer'):
+    with tf.compat.v1.variable_scope("lstm"):
+      lstmcell = tf.compat.v1.nn.rnn_cell.BasicLSTMCell(LSTM_units, forget_bias=1.0,
                    state_is_tuple=True)
-      _, last = tf.nn.dynamic_rnn(cell=lstmcell, inputs=fingerprint_4d,
+      _, last = tf.compat.v1.nn.dynamic_rnn(cell=lstmcell, inputs=fingerprint_4d,
                   dtype=tf.float32)
       flow = last[-1]
 
-  with tf.name_scope('Output-Layer'):
-    W_o = tf.get_variable('W_o', shape=[LSTM_units, num_classes],
-            initializer=tf.contrib.layers.xavier_initializer())
-    b_o = tf.get_variable('b_o', shape=[num_classes])
+  with tf.compat.v1.name_scope('Output-Layer'):
+    W_o = tf.compat.v1.get_variable('W_o', shape=[LSTM_units, num_classes],
+            initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
+    b_o = tf.compat.v1.get_variable('b_o', shape=[num_classes])
     logits = tf.matmul(flow, W_o) + b_o
 
   if is_training:
@@ -1158,18 +1158,18 @@ def create_lstm_model(fingerprint_input, model_settings, model_size_info,
   num_classes = model_settings['label_count']
   projection_units = model_size_info[0]
   LSTM_units = model_size_info[1]
-  with tf.name_scope('LSTM-Layer'):
-    with tf.variable_scope("lstm"):
-      lstmcell = tf.contrib.rnn.LSTMCell(LSTM_units, use_peepholes=True,
+  with tf.compat.v1.name_scope('LSTM-Layer'):
+    with tf.compat.v1.variable_scope("lstm"):
+      lstmcell = tf.compat.v1.nn.rnn_cell.LSTMCell(LSTM_units, use_peepholes=True,
                    num_proj=projection_units)
-      _, last = tf.nn.dynamic_rnn(cell=lstmcell, inputs=fingerprint_4d,
+      _, last = tf.compat.v1.nn.dynamic_rnn(cell=lstmcell, inputs=fingerprint_4d,
                   dtype=tf.float32)
       flow = last[-1]
 
-  with tf.name_scope('Output-Layer'):
-    W_o = tf.get_variable('W_o', shape=[projection_units, num_classes],
-            initializer=tf.contrib.layers.xavier_initializer())
-    b_o = tf.get_variable('b_o', shape=[num_classes])
+  with tf.compat.v1.name_scope('Output-Layer'):
+    W_o = tf.compat.v1.get_variable('W_o', shape=[projection_units, num_classes],
+            initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
+    b_o = tf.compat.v1.get_variable('b_o', shape=[num_classes])
     logits = tf.matmul(flow, W_o) + b_o
 
   if is_training:
@@ -1188,7 +1188,7 @@ class LayerNormGRUCell(rnn_cell_impl.RNNCell):
     super(LayerNormGRUCell, self).__init__(_reuse=reuse)
 
     if input_size is not None:
-      tf.logging.info("%s: The input_size parameter is deprecated.", self)
+      tf.compat.v1.logging.info("%s: The input_size parameter is deprecated.", self)
 
     self._num_units = num_units
     self._activation = activation
@@ -1281,9 +1281,9 @@ def create_gru_model(fingerprint_input, model_settings, model_size_info,
         gru_cell_bw.append(LayerNormGRUCell(gru_units))
   else:
     for i in range(num_layers):
-      gru_cell_fw.append(tf.contrib.rnn.GRUCell(gru_units))
+      gru_cell_fw.append(tf.compat.v1.nn.rnn_cell.GRUCell(gru_units))
       if bidirectional:
-        gru_cell_bw.append(tf.contrib.rnn.GRUCell(gru_units))
+        gru_cell_bw.append(tf.compat.v1.nn.rnn_cell.GRUCell(gru_units))
 
   if bidirectional:
     outputs, output_state_fw, output_state_bw = \
@@ -1291,15 +1291,15 @@ def create_gru_model(fingerprint_input, model_settings, model_size_info,
       fingerprint_4d, dtype=tf.float32)
     flow = outputs[:, -1, :]
   else:
-    cells = tf.contrib.rnn.MultiRNNCell(gru_cell_fw)
-    _, last = tf.nn.dynamic_rnn(cell=cells, inputs=fingerprint_4d,
+    cells = tf.compat.v1.nn.rnn_cell.MultiRNNCell(gru_cell_fw)
+    _, last = tf.compat.v1.nn.dynamic_rnn(cell=cells, inputs=fingerprint_4d,
                 dtype=tf.float32)
     flow = last[-1]
 
-  with tf.name_scope('Output-Layer'):
-    W_o = tf.get_variable('W_o', shape=[flow.get_shape()[-1], num_classes],
-            initializer=tf.contrib.layers.xavier_initializer())
-    b_o = tf.get_variable('b_o', shape=[num_classes])
+  with tf.compat.v1.name_scope('Output-Layer'):
+    W_o = tf.compat.v1.get_variable('W_o', shape=[flow.get_shape()[-1], num_classes],
+            initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
+    b_o = tf.compat.v1.get_variable('b_o', shape=[num_classes])
     logits = tf.matmul(flow, W_o) + b_o
 
   if is_training:
@@ -1335,20 +1335,20 @@ def create_crnn_model(fingerprint_input, model_settings,
   first_filter_stride_y = model_size_info[3]
   first_filter_stride_x = model_size_info[4]
 
-  first_weights = tf.get_variable('W', shape=[first_filter_height,
+  first_weights = tf.compat.v1.get_variable('W', shape=[first_filter_height,
                     first_filter_width, 1, first_filter_count],
-    initializer=tf.contrib.layers.xavier_initializer())
+    initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
 
   first_bias = tf.compat.v1.get_variable(
       name='first_bias',
       initializer=tf.compat.v1.zeros_initializer,
       shape=[first_filter_count])
-  first_conv = tf.nn.conv2d(fingerprint_4d, first_weights, [
+  first_conv = tf.nn.conv2d(input=fingerprint_4d, filters=first_weights, strides=[
       1, first_filter_stride_y, first_filter_stride_x, 1
-  ], 'VALID') + first_bias
+  ], padding='VALID') + first_bias
   first_relu = tf.nn.relu(first_conv)
   if is_training:
-    first_dropout = tf.nn.dropout(first_relu, dropout_rate)
+    first_dropout = tf.nn.dropout(first_relu, 1 - (dropout_rate))
   else:
     first_dropout = first_relu
   first_conv_output_width = int(math.floor(
@@ -1372,9 +1372,9 @@ def create_crnn_model(fingerprint_input, model_settings,
         cell_bw.append(LayerNormGRUCell(RNN_units))
   else:
     for i in range(num_rnn_layers):
-      cell_fw.append(tf.contrib.rnn.GRUCell(RNN_units))
+      cell_fw.append(tf.compat.v1.nn.rnn_cell.GRUCell(RNN_units))
       if bidirectional:
-        cell_bw.append(tf.contrib.rnn.GRUCell(RNN_units))
+        cell_bw.append(tf.compat.v1.nn.rnn_cell.GRUCell(RNN_units))
 
   if bidirectional:
     outputs, output_state_fw, output_state_bw = \
@@ -1383,16 +1383,16 @@ def create_crnn_model(fingerprint_input, model_settings,
     flow_dim = first_conv_output_height*RNN_units*2
     flow = tf.reshape(outputs, [-1, flow_dim])
   else:
-    cells = tf.contrib.rnn.MultiRNNCell(cell_fw)
-    _, last = tf.nn.dynamic_rnn(cell=cells, inputs=flow, dtype=tf.float32)
+    cells = tf.compat.v1.nn.rnn_cell.MultiRNNCell(cell_fw)
+    _, last = tf.compat.v1.nn.dynamic_rnn(cell=cells, inputs=flow, dtype=tf.float32)
     flow_dim = RNN_units
     flow = last[-1]
 
   first_fc_output_channels = model_size_info[7]
 
-  first_fc_weights = tf.get_variable('fcw', shape=[flow_dim,
+  first_fc_weights = tf.compat.v1.get_variable('fcw', shape=[flow_dim,
     first_fc_output_channels],
-    initializer=tf.contrib.layers.xavier_initializer())
+    initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
 
   first_fc_bias = tf.compat.v1.get_variable(
       name='first_fc_bias',
@@ -1400,7 +1400,7 @@ def create_crnn_model(fingerprint_input, model_settings,
       shape=[first_fc_output_channels])
   first_fc = tf.nn.relu(tf.matmul(flow, first_fc_weights) + first_fc_bias)
   if is_training:
-    final_fc_input = tf.nn.dropout(first_fc, dropout_rate)
+    final_fc_input = tf.nn.dropout(first_fc, 1 - (dropout_rate))
   else:
     final_fc_input = first_fc
 
@@ -1445,7 +1445,7 @@ def create_ds_cnn_model(fingerprint_input, model_settings, model_size_info,
         [slim.convolution2d, slim.separable_convolution2d],
         weights_initializer=slim.initializers.xavier_initializer(),
         biases_initializer=slim.init_ops.zeros_initializer(),
-        weights_regularizer=slim.l2_regularizer(weight_decay)) as sc:
+        weights_regularizer=tf.keras.regularizers.l2(0.5 * (weight_decay))) as sc:
       return sc
 
   def _depthwise_separable_conv(inputs,
@@ -1506,7 +1506,7 @@ def create_ds_cnn_model(fingerprint_input, model_settings, model_size_info,
     i += 1
 
   scope = 'DS-CNN'
-  with tf.variable_scope(scope) as sc:
+  with tf.compat.v1.variable_scope(scope) as sc:
     end_points_collection = sc.name + '_end_points'
     with slim.arg_scope([slim.convolution2d, slim.separable_convolution2d],
                         activation_fn=None,
