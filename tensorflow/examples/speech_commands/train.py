@@ -136,6 +136,7 @@ def main(_):
       fingerprint_input,
       model_settings,
       FLAGS.model_architecture,
+      FLAGS.model_size_info,
       is_training=True)
 
   # Define loss and optimizer
@@ -222,6 +223,7 @@ def main(_):
     f.write('\n'.join(audio_processor.words_list))
 
   # Training loop.
+  #best_accuracy = 0
   training_steps_max = np.sum(training_steps_list)
   for training_step in xrange(start_step, training_steps_max + 1):
     # Figure out what the current learning rate is.
@@ -288,6 +290,14 @@ def main(_):
       tf.compat.v1.logging.info('Step %d: Validation accuracy = %.1f%% (N=%d)' %
                                 (training_step, total_accuracy * 100, set_size))
 
+      # Save the model checkpoint when validation accuracy improves
+      #if total_accuracy > best_accuracy:
+      #  best_accuracy = total_accuracy
+      #  checkpoint_path = os.path.join(FLAGS.train_dir, 'best',
+      #                                 FLAGS.model_architecture + '_'+ str(int(best_accuracy*10000)) + '.ckpt')
+      #  tf.logging.info('Saving best model to "%s-%d"', checkpoint_path, training_step)
+      #  saver.save(sess, checkpoint_path, global_step=training_step)
+      #tf.logging.info('So far the best validation accuracy is %.2f%%' % (best_accuracy*100))
     # Save the model checkpoint periodically.
     if (training_step % FLAGS.save_step_interval == 0 or
         training_step == training_steps_max):
@@ -460,6 +470,12 @@ if __name__ == '__main__':
       type=str,
       default='conv',
       help='What model architecture to use')
+  parser.add_argument(
+      '--model_size_info',
+      type=int,
+      nargs="+",
+      default=[128,128,128],
+      help='Model dimensions - different for various models')
   parser.add_argument(
       '--check_nans',
       type=bool,
