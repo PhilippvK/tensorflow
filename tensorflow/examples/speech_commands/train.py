@@ -154,8 +154,13 @@ def main(_):
 
   # Create the back propagation and training evaluation machinery in the graph.
   with tf.compat.v1.name_scope('cross_entropy'):
-    cross_entropy_mean = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-        labels=ground_truth_input, logits=logits)
+    cross_entropy_mean = tf.reduce_mean(
+        input_tensor=tf.nn.softmax_cross_entropy_with_logits(
+            labels=tf.stop_gradient(ground_truth_input), logits=logits))
+  tf.compat.v1.summary.scalar('cross_entropy', cross_entropy_mean)
+
+#    cross_entropy_mean = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+#        labels=ground_truth_input, logits=logits)
 
   if FLAGS.quantize:
     try:
@@ -168,13 +173,18 @@ def main(_):
       e.args = (msg,)
       raise e
 
-  with tf.compat.v1.name_scope('train'), tf.control_dependencies(
-      control_dependencies):
+  update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+  with tf.compat.v1.name_scope('train'), tf.control_dependencies(update_ops), tf.control_dependencies(control_dependencies):
+  #with tf.compat.v1.name_scope('train'), tf.control_dependencies(
+  #    control_dependencies):
     learning_rate_input = tf.compat.v1.placeholder(
         tf.float32, [], name='learning_rate_input')
     if FLAGS.optimizer == 'gradient_descent':
-      train_step = tf.compat.v1.train.GradientDescentOptimizer(
-          learning_rate_input).minimize(cross_entropy_mean)
+      train_op = tf.compat.v1.train.AdamOptimizer(
+          learning_rate_input)
+      train_step = slim.learning.create_train_op(cross_entropy_mean, train_op)
+      #train_step = tf.compat.v1.train.GradientDescentOptimizer(
+      #    learning_rate_input).minimize(cross_entropy_mean)
     elif FLAGS.optimizer == 'momentum':
       train_step = tf.compat.v1.train.MomentumOptimizer(
           learning_rate_input, .9,
@@ -182,15 +192,21 @@ def main(_):
     else:
       raise Exception('Invalid Optimizer')
   predicted_indices = tf.argmax(input=logits, axis=1)
-  correct_prediction = tf.equal(predicted_indices, ground_truth_input)
-  confusion_matrix = tf.math.confusion_matrix(labels=ground_truth_input,
-                                              predictions=predicted_indices,
-                                              num_classes=label_count)
-  evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction,
-                                                        tf.float32))
-  with tf.compat.v1.get_default_graph().name_scope('eval'):
-    tf.compat.v1.summary.scalar('cross_entropy', cross_entropy_mean)
-    tf.compat.v1.summary.scalar('accuracy', evaluation_step)
+  expected_indices = tf.argmax(input=ground_truth_input, axis=1)
+  correct_prediction = tf.equal(predicted_indices, expected_indices)
+  confusion_matrix = tf.math.confusion_matrix(
+      labels=expected_indices, predictions=predicted_indices, num_classes=label_count)
+  evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction, tf.float32))
+  tf.compat.v1.summary.scalar('accuracy', evaluation_step)
+  #correct_prediction = tf.equal(predicted_indices, ground_truth_input)
+  #confusion_matrix = tf.math.confusion_matrix(labels=ground_truth_input,
+  #                                            predictions=predicted_indices,
+  #                                            num_classes=label_count)
+  #evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction,
+  #                                                      tf.float32))
+  #with tf.compat.v1.get_default_graph().name_scope('eval'):
+  #  tf.compat.v1.summary.scalar('cross_entropy', cross_entropy_mean)
+  #  tf.compat.v1.summary.scalar('accuracy', evaluation_step)
 
   global_step = tf.compat.v1.train.get_or_create_global_step()
   increment_global_step = tf.compat.v1.assign(global_step, global_step + 1)
@@ -198,13 +214,18 @@ def main(_):
   saver = tf.compat.v1.train.Saver(tf.compat.v1.global_variables())
 
   # Merge all the summaries and write them out to /tmp/retrain_logs (by default)
-  merged_summaries = tf.compat.v1.summary.merge_all(scope='eval')
+  #merged_summaries = tf.compat.v1.summary.merge_all(scope='eval')
+  merged_summaries = tf.compat.v1.summary.merge_all()
   train_writer = tf.compat.v1.summary.FileWriter(FLAGS.summaries_dir + '/train',
-                                                 sess.graph)
-  validation_writer = tf.compat.v1.summary.FileWriter(
-      FLAGS.summaries_dir + '/validation')
+                                       sess.graph)
+  validation_writer = tf.compat.v1.summary.FileWriter(FLAGS.summaries_dir + '/validation')
 
   tf.compat.v1.global_variables_initializer().run()
+
+  # Parameter counts
+  params = tf.compat.v1.trainable_variables()
+  num_params = sum(map(lambda t: np.prod(tf.shape(input=t.value()).eval()), params))
+  print('Total number of Parameters: ', num_params)
 
   start_step = 1
 
@@ -216,7 +237,7 @@ def main(_):
 
   # Save graph.pbtxt.
   tf.io.write_graph(sess.graph_def, FLAGS.train_dir,
-                    FLAGS.model_architecture + '.pbtxt')
+                       FLAGS.model_architecture + '.pbtxt')
 
   # Save list of words.
   with gfile.GFile(
@@ -225,7 +246,7 @@ def main(_):
     f.write('\n'.join(audio_processor.words_list))
 
   # Training loop.
-  #best_accuracy = 0
+  best_accuracy = 0
   training_steps_max = np.sum(training_steps_list)
   for training_step in xrange(start_step, training_steps_max + 1):
     # Figure out what the current learning rate is.
@@ -252,7 +273,8 @@ def main(_):
             fingerprint_input: train_fingerprints,
             ground_truth_input: train_ground_truth,
             learning_rate_input: learning_rate_value,
-            dropout_rate: 0.5
+            dropout_rate: 1.0
+            #dropout_rate: 0.5
         })
     train_writer.add_summary(train_summary, training_step)
     tf.compat.v1.logging.debug(
@@ -279,7 +301,8 @@ def main(_):
             feed_dict={
                 fingerprint_input: validation_fingerprints,
                 ground_truth_input: validation_ground_truth,
-                dropout_rate: 0.0
+                dropout_rate: 1.0
+                #dropout_rate: 0.0
             })
         validation_writer.add_summary(validation_summary, training_step)
         batch_size = min(FLAGS.batch_size, set_size - i)
@@ -293,21 +316,21 @@ def main(_):
                                 (training_step, total_accuracy * 100, set_size))
 
       # Save the model checkpoint when validation accuracy improves
-      #if total_accuracy > best_accuracy:
-      #  best_accuracy = total_accuracy
-      #  checkpoint_path = os.path.join(FLAGS.train_dir, 'best',
-      #                                 FLAGS.model_architecture + '_'+ str(int(best_accuracy*10000)) + '.ckpt')
-      #  tf.logging.info('Saving best model to "%s-%d"', checkpoint_path, training_step)
-      #  saver.save(sess, checkpoint_path, global_step=training_step)
-      #tf.logging.info('So far the best validation accuracy is %.2f%%' % (best_accuracy*100))
+      if total_accuracy > best_accuracy:
+        best_accuracy = total_accuracy
+        checkpoint_path = os.path.join(FLAGS.train_dir, 'best',
+                                       FLAGS.model_architecture + '_'+ str(int(best_accuracy*10000)) + '.ckpt')
+        tf.logging.info('Saving best model to "%s-%d"', checkpoint_path, training_step)
+        saver.save(sess, checkpoint_path, global_step=training_step)
+      tf.logging.info('So far the best validation accuracy is %.2f%%' % (best_accuracy*100))
     # Save the model checkpoint periodically.
-    if (training_step % FLAGS.save_step_interval == 0 or
-        training_step == training_steps_max):
-      checkpoint_path = os.path.join(FLAGS.train_dir,
-                                     FLAGS.model_architecture + '.ckpt')
-      tf.compat.v1.logging.info('Saving to "%s-%d"', checkpoint_path,
-                                training_step)
-      saver.save(sess, checkpoint_path, global_step=training_step)
+    #if (training_step % FLAGS.save_step_interval == 0 or
+    #    training_step == training_steps_max):
+    #  checkpoint_path = os.path.join(FLAGS.train_dir,
+    #                                 FLAGS.model_architecture + '.ckpt')
+    #  tf.compat.v1.logging.info('Saving to "%s-%d"', checkpoint_path,
+    #                            training_step)
+    #  saver.save(sess, checkpoint_path, global_step=training_step)
 
   set_size = audio_processor.set_size('testing')
   tf.compat.v1.logging.info('set_size=%d', set_size)
@@ -321,7 +344,8 @@ def main(_):
         feed_dict={
             fingerprint_input: test_fingerprints,
             ground_truth_input: test_ground_truth,
-            dropout_rate: 0.0
+            dropout_rate: 1.0
+            #dropout_rate: 0.0
         })
     batch_size = min(FLAGS.batch_size, set_size - i)
     total_accuracy += (test_accuracy * batch_size) / set_size
