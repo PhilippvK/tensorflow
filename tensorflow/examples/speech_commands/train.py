@@ -136,8 +136,8 @@ def main(_):
       fingerprint_input,
       model_settings,
       FLAGS.model_architecture,
-      FLAGS.model_size_info,
-      is_training=True)
+      is_training=True,
+      model_size_info=FLAGS.model_size_info)
 
   # Define loss and optimizer
   ground_truth_input = tf.compat.v1.placeholder(
