@@ -81,6 +81,7 @@ import tensorflow as tf
 import input_data
 import models
 from tensorflow.python.platform import gfile
+from tensorflow.contrib import slim as slim
 
 FLAGS = None
 
