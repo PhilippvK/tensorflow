@@ -23,6 +23,12 @@ import math
 
 import tensorflow as tf
 
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import init_ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn_ops
+from tensorflow.python.ops import rnn_cell_impl
+from tensorflow.python.ops import variable_scope as vs
 
 def _next_power_of_two(x):
   """Calculates the smallest enclosing power of two for an input.
