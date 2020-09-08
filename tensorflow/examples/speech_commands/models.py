@@ -966,7 +966,7 @@ def create_dnn_model(fingerprint_input, model_settings, model_size_info,
           flow = tf.matmul(flow, W) + b
           flow = tf.nn.relu(flow)
           if is_training:
-            flow = tf.nn.dropout(flow, 1 - (dropout_rate))
+            flow = tf.nn.dropout(flow, rate=dropout_rate)
 
   weights = tf.compat.v1.get_variable('final_fc', shape=[layer_dim[-1], label_count],
               initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
@@ -1024,7 +1024,7 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
                  name='bn1')
   first_relu = tf.nn.relu(first_conv)
   if is_training:
-    first_dropout = tf.nn.dropout(first_relu, 1 - (dropout_rate))
+    first_dropout = tf.nn.dropout(first_relu, rate=dropout_rate)
   else:
     first_dropout = first_relu
   first_conv_output_width = math.ceil(
@@ -1049,7 +1049,7 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
                   name='bn2')
   second_relu = tf.nn.relu(second_conv)
   if is_training:
-    second_dropout = tf.nn.dropout(second_relu, 1 - (dropout_rate))
+    second_dropout = tf.nn.dropout(second_relu, rate=dropout_rate)
   else:
     second_dropout = second_relu
   second_conv_output_width = math.ceil(
@@ -1084,7 +1084,7 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
                name='bn3')
   first_fc = tf.nn.relu(first_fc)
   if is_training:
-    final_fc_input = tf.nn.dropout(first_fc, 1 - (dropout_rate))
+    final_fc_input = tf.nn.dropout(first_fc, rate=dropout_rate)
   else:
     final_fc_input = first_fc
   label_count = model_settings['label_count']
@@ -1348,7 +1348,7 @@ def create_crnn_model(fingerprint_input, model_settings,
   ], padding='VALID') + first_bias
   first_relu = tf.nn.relu(first_conv)
   if is_training:
-    first_dropout = tf.nn.dropout(first_relu, 1 - (dropout_rate))
+    first_dropout = tf.nn.dropout(first_relu, rate=dropout_rate)
   else:
     first_dropout = first_relu
   first_conv_output_width = int(math.floor(
@@ -1400,7 +1400,7 @@ def create_crnn_model(fingerprint_input, model_settings,
       shape=[first_fc_output_channels])
   first_fc = tf.nn.relu(tf.matmul(flow, first_fc_weights) + first_fc_bias)
   if is_training:
-    final_fc_input = tf.nn.dropout(first_fc, 1 - (dropout_rate))
+    final_fc_input = tf.nn.dropout(first_fc, rate=dropout_rate)
   else:
     final_fc_input = first_fc
 
