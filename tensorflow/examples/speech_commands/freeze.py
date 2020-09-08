@@ -62,7 +62,7 @@ FLAGS = None
 
 def create_inference_graph(wanted_words, sample_rate, clip_duration_ms,
                            clip_stride_ms, window_size_ms, window_stride_ms,
-                           feature_bin_count, model_architecture, preprocess):
+                           feature_bin_count, model_architecture, model_size_info, preprocess):
   """Creates an audio model with the nodes needed for inference.
 
   Uses the supplied arguments to create a model, and inserts the input and
@@ -77,6 +77,7 @@ def create_inference_graph(wanted_words, sample_rate, clip_duration_ms,
     window_stride_ms: How far apart time slices should be.
     feature_bin_count: Number of frequency bands to analyze.
     model_architecture: Name of the kind of model to generate.
+    model_size_info: TODO
     preprocess: How the spectrogram is processed to produce features, for
       example 'mfcc', 'average', or 'micro'.
 
@@ -149,8 +150,8 @@ def create_inference_graph(wanted_words, sample_rate, clip_duration_ms,
   reshaped_input = tf.reshape(fingerprint_input, [-1, fingerprint_size])
 
   logits = models.create_model(
-      reshaped_input, model_settings, model_architecture, is_training=False,
-      runtime_settings=runtime_settings)
+      reshaped_input, model_settings, model_architecture, model_size_info,
+      is_training=False, runtime_settings=runtime_settings)
 
   # Create an output to use for inference.
   softmax = tf.nn.softmax(logits, name='labels_softmax')
@@ -225,7 +226,8 @@ def main(_):
   input_tensor, output_tensor = create_inference_graph(
       FLAGS.wanted_words, FLAGS.sample_rate, FLAGS.clip_duration_ms,
       FLAGS.clip_stride_ms, FLAGS.window_size_ms, FLAGS.window_stride_ms,
-      FLAGS.feature_bin_count, FLAGS.model_architecture, FLAGS.preprocess)
+      FLAGS.feature_bin_count, FLAGS.model_architecture, FLAGS.model_size_info,
+      FLAGS.preprocess)
   if FLAGS.quantize:
     tf.contrib.quantize.create_eval_graph()
   models.load_variables_from_checkpoint(sess, FLAGS.start_checkpoint)
@@ -286,6 +288,12 @@ if __name__ == '__main__':
       type=str,
       default='conv',
       help='What model architecture to use')
+  parser.add_argument(
+      '--model_size_info',
+      type=int,
+      nargs="+",
+      default=[128,128,128],
+      help='Model dimensions - different for various models')
   parser.add_argument(
       '--wanted_words',
       type=str,
