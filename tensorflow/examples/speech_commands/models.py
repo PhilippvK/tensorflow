@@ -971,7 +971,7 @@ def create_dnn_model(fingerprint_input, model_settings, model_size_info,
   weights = tf.compat.v1.get_variable('final_fc', shape=[layer_dim[-1], label_count],
               initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
   bias = tf.compat.v1.get_variable(name='bias',
-                                   initializer=tf.compat.v2.zeros_initializer,
+                                   initializer=tf.compat.v1.zeros_initializer,
                                    shape=[label_count])
   logits = tf.matmul(flow, weights) + bias
   if is_training:
@@ -1015,7 +1015,7 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
       initializer=tf.compat.v1.truncated_normal_initializer(stddev=0.01),
       shape=[first_filter_height, first_filter_width, 1, first_filter_count])
   first_bias = tf.compat.v1.get_variable(name='first_bias',
-                                   initializer=tf.compat.v2.zeros_initializer,
+                                   initializer=tf.compat.v1.zeros_initializer,
                                    shape=[first_filter_count])
   first_conv = tf.nn.conv2d(input=fingerprint_4d, filters=first_weights, strides=[
       1, first_filter_stride_y, first_filter_stride_x, 1
@@ -1040,7 +1040,7 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
       initializer=tf.compat.v1.truncated_normal_initializer(stddev=0.01),
       shape=[second_filter_height, second_filter_width, first_filter_count, second_filter_count])
   second_bias = tf.compat.v1.get_variable(name='second_bias',
-                                          initializer=tf.compat.v2.zeros_initializer,
+                                          initializer=tf.compat.v1.zeros_initializer,
                                           shape=[second_filter_count])
   second_conv = tf.nn.conv2d(input=first_dropout, filters=second_weights, strides=[
       1, second_filter_stride_y, second_filter_stride_x, 1
@@ -1077,7 +1077,7 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
       initializer=tf.compat.v1.truncated_normal_initializer(stddev=0.01),
       shape=[linear_layer_size, first_fc_output_channels])
   first_fc_bias = tf.compat.v1.get_variable(name='first_fc_bias',
-                                            initializer=tf.compat.v2.zeros_initializer,
+                                            initializer=tf.compat.v1.zeros_initializer,
                                             shape=[first_fc_output_channels])
   first_fc = tf.matmul(flow, first_fc_weights) + first_fc_bias
   first_fc = tf.compat.v1.layers.batch_normalization(first_fc, training=is_training,
@@ -1093,7 +1093,7 @@ def create_cnn_model(fingerprint_input, model_settings, model_size_info,
       initializer=tf.compat.v1.truncated_normal_initializer(stddev=0.01),
       shape=[first_fc_output_channels, label_count])
   final_fc_bias = tf.compat.v1.get_variable(name='final_fc_bias',
-                                            initializer=tf.compat.v2.zeros_initializer,
+                                            initializer=tf.compat.v1.zeros_initializer,
                                             shape=[label_count])
   final_fc = tf.matmul(final_fc_input, final_fc_weights) + final_fc_bias
   if is_training:
