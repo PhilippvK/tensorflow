@@ -143,8 +143,10 @@ def main(_):
   # Define loss and optimizer
   #ground_truth_input = tf.compat.v1.placeholder(
   #    tf.int64, [None], name='groundtruth_input')
+  #ground_truth_input = tf.compat.v1.placeholder(
+  #    tf.float32, [None, label_count], name='groundtruth_input')
   ground_truth_input = tf.compat.v1.placeholder(
-      tf.float32, [None, label_count], name='groundtruth_input')
+      tf.float32, [None], name='groundtruth_input')
 
   # Optionally we can add runtime checks to spot when NaNs or other symptoms of
   # numerical errors start occurring during training.
@@ -193,18 +195,18 @@ def main(_):
     else:
       raise Exception('Invalid Optimizer')
   predicted_indices = tf.argmax(input=logits, axis=1)
-  expected_indices = tf.argmax(input=ground_truth_input, axis=1)
-  correct_prediction = tf.equal(predicted_indices, expected_indices)
+  #expected_indices = tf.argmax(input=ground_truth_input, axis=1)
+  #correct_prediction = tf.equal(predicted_indices, expected_indices)
+  correct_prediction = tf.equal(predicted_indices, ground_truth_input)
   confusion_matrix = tf.math.confusion_matrix(
       labels=expected_indices, predictions=predicted_indices, num_classes=label_count)
-  evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction, tf.float32))
-  tf.compat.v1.summary.scalar('accuracy', evaluation_step)
-  #correct_prediction = tf.equal(predicted_indices, ground_truth_input)
   #confusion_matrix = tf.math.confusion_matrix(labels=ground_truth_input,
   #                                            predictions=predicted_indices,
   #                                            num_classes=label_count)
+  evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction, tf.float32))
   #evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction,
   #                                                      tf.float32))
+  tf.compat.v1.summary.scalar('accuracy', evaluation_step)
   #with tf.compat.v1.get_default_graph().name_scope('eval'):
   #  tf.compat.v1.summary.scalar('cross_entropy', cross_entropy_mean)
   #  tf.compat.v1.summary.scalar('accuracy', evaluation_step)
