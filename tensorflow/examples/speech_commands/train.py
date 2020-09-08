@@ -140,8 +140,10 @@ def main(_):
       model_size_info=FLAGS.model_size_info)
 
   # Define loss and optimizer
+  #ground_truth_input = tf.compat.v1.placeholder(
+  #    tf.int64, [None], name='groundtruth_input')
   ground_truth_input = tf.compat.v1.placeholder(
-      tf.int64, [None], name='groundtruth_input')
+      tf.float32, [None, label_count], name='groundtruth_input')
 
   # Optionally we can add runtime checks to spot when NaNs or other symptoms of
   # numerical errors start occurring during training.
