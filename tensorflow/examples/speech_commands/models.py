@@ -145,7 +145,7 @@ def create_model(fingerprint_input, model_settings, model_architecture,
     return create_tiny_embedding_conv_model(fingerprint_input, model_settings,
                                             is_training)
   elif model_architecture == 'dnn':
-    model_size_info = [128,128,128]
+    model_size_info = [144,144,144]
     return create_dnn_model(fingerprint_input, model_settings, model_size_info,
                               is_training)
   elif model_architecture == 'ds_cnn':
