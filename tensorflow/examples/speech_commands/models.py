@@ -998,7 +998,7 @@ def create_ds_cnn_model(fingerprint_input, model_settings, model_size_info,
     dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
 
   label_count = model_settings['label_count']
-  input_frequency_size = model_settings['dct_coefficient_count']
+  input_frequency_size = model_settings['feature_bin_count']
   input_time_size = model_settings['spectrogram_length']
   fingerprint_4d = tf.reshape(fingerprint_input,
                               [-1, input_time_size, input_frequency_size, 1])
