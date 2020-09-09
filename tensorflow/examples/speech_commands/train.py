@@ -143,10 +143,6 @@ def main(_):
   # Define loss and optimizer
   ground_truth_input = tf.compat.v1.placeholder(
       tf.int64, [None], name='groundtruth_input')
-  #ground_truth_input = tf.compat.v1.placeholder(
-  #    tf.float32, [None, label_count], name='groundtruth_input')
-  #ground_truth_input = tf.compat.v1.placeholder(
-  #    tf.float32, [None], name='groundtruth_input')
 
   # Optionally we can add runtime checks to spot when NaNs or other symptoms of
   # numerical errors start occurring during training.
@@ -157,7 +153,6 @@ def main(_):
 
   # Create the back propagation and training evaluation machinery in the graph.
   with tf.compat.v1.name_scope('cross_entropy'):
-
     cross_entropy_mean = tf.compat.v1.losses.sparse_softmax_cross_entropy(
         labels=ground_truth_input, logits=logits)
 
@@ -189,21 +184,15 @@ def main(_):
     else:
       raise Exception('Invalid Optimizer')
   predicted_indices = tf.argmax(input=logits, axis=1)
-  #expected_indices = tf.argmax(input=ground_truth_input, axis=1)
-  #correct_prediction = tf.equal(predicted_indices, expected_indices)
   correct_prediction = tf.equal(predicted_indices, ground_truth_input)
-  #confusion_matrix = tf.math.confusion_matrix(
-  #    labels=expected_indices, predictions=predicted_indices, num_classes=label_count)
   confusion_matrix = tf.math.confusion_matrix(labels=ground_truth_input,
                                               predictions=predicted_indices,
                                               num_classes=label_count)
-  evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction, tf.float32))
-  #evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction,
-  #                                                      tf.float32))
-  tf.compat.v1.summary.scalar('accuracy', evaluation_step)
-  #with tf.compat.v1.get_default_graph().name_scope('eval'):
-  #  tf.compat.v1.summary.scalar('cross_entropy', cross_entropy_mean)
-  #  tf.compat.v1.summary.scalar('accuracy', evaluation_step)
+  evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction,
+                                                        tf.float32))
+  with tf.compat.v1.get_default_graph().name_scope('eval'):
+    tf.compat.v1.summary.scalar('cross_entropy', cross_entropy_mean)
+    tf.compat.v1.summary.scalar('accuracy', evaluation_step)
 
   global_step = tf.compat.v1.train.get_or_create_global_step()
   increment_global_step = tf.compat.v1.assign(global_step, global_step + 1)
@@ -211,8 +200,7 @@ def main(_):
   saver = tf.compat.v1.train.Saver(tf.compat.v1.global_variables())
 
   # Merge all the summaries and write them out to /tmp/retrain_logs (by default)
-  #merged_summaries = tf.compat.v1.summary.merge_all(scope='eval')
-  merged_summaries = tf.compat.v1.summary.merge_all()
+  merged_summaries = tf.compat.v1.summary.merge_all(scope='eval')
   train_writer = tf.compat.v1.summary.FileWriter(FLAGS.summaries_dir + '/train',
                                        sess.graph)
   validation_writer = tf.compat.v1.summary.FileWriter(FLAGS.summaries_dir + '/validation')
