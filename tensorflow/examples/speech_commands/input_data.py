@@ -550,7 +550,6 @@ class AudioProcessor(object):
     # Use the processing graph we created earlier to repeatedly to generate the
     # final output sample data we'll use in training.
     for i in xrange(offset, offset + sample_count):
-      print("i={}".format(i))
       # Pick which audio sample to use.
       if how_many == -1 or pick_deterministically:
         sample_index = i
@@ -573,7 +572,6 @@ class AudioProcessor(object):
           self.time_shift_padding_placeholder_: time_shift_padding,
           self.time_shift_offset_placeholder_: time_shift_offset,
       }
-      print("input_dict={}".format(input_dict))
       # Choose a section of background noise to mix in.
       if use_background or sample['label'] == SILENCE_LABEL:
         background_index = np.random.randint(len(self.background_data))
@@ -613,7 +611,8 @@ class AudioProcessor(object):
       label_index = self.word_to_index[sample['label']]
       labels[i - offset] = label_index
       #labels[i - offset, label_index] = 1
-      print("data={} labels={}".format(data, labels))
+      print("i={} input_dict={}".format(i, input_dict))
+    print("data={} labels={}".format(data, labels))
     return data, labels
 
   def get_wav_files(self, how_many, offset, model_settings, mode):

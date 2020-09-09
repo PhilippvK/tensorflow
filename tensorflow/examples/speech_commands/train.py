@@ -263,6 +263,23 @@ def main(_):
     train_fingerprints, train_ground_truth = audio_processor.get_data(
         FLAGS.batch_size, 0, model_settings, FLAGS.background_frequency,
         FLAGS.background_volume, time_shift_samples, 'training', sess)
+    print("---")
+    print("[]={}".format([
+            merged_summaries,
+            evaluation_step,
+            cross_entropy_mean,
+            train_step,
+            increment_global_step,
+        ]))
+    print("-")
+    print("feed_dict={}".format({
+            fingerprint_input: train_fingerprints,
+            ground_truth_input: train_ground_truth,
+            learning_rate_input: learning_rate_value,
+            dropout_rate: 1.0
+            #dropout_rate: 0.5
+        }))
+    print("-")
     # Run the graph with this batch of training data.
     train_summary, train_accuracy, cross_entropy_value, _, _ = sess.run(
         [
@@ -279,6 +296,9 @@ def main(_):
             dropout_rate: 1.0
             #dropout_rate: 0.5
         })
+    print("-")
+    print("train_summary={}, train_accuracy={}, cross_entropy_value={}".format(train_summary, train_accuracy, cross_entropy_value))
+    print("---")
     train_writer.add_summary(train_summary, training_step)
     tf.compat.v1.logging.debug(
         'Step #%d: rate %f, accuracy %.1f%%, cross entropy %f' %
