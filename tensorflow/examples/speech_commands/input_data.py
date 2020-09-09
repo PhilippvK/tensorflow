@@ -508,7 +508,6 @@ class AudioProcessor(object):
 
   def get_data(self, how_many, offset, model_settings, background_frequency,
                background_volume_range, time_shift, mode, sess):
-    print("get_data(how_many={}, offset={}, model_settings={}, background_frequency={}, background_volume_range={}, time_shift={}, mode={}, sess={})".format(how_many, offset, model_settings, background_frequency, background_volume_range, time_shift, mode, sess))
     """Gather samples from the data set, applying transformations as needed.
 
     When the mode is 'training', a random selection of samples will be returned,
@@ -540,7 +539,6 @@ class AudioProcessor(object):
       sample_count = len(candidates)
     else:
       sample_count = max(0, min(how_many, len(candidates) - offset))
-      print("{} = max(0, min({}, {} - {}))".format(sample_count, how_many, len(candidates), offset))
     # Data and labels will be populated and returned.
     data = np.zeros((sample_count, model_settings['fingerprint_size']))
     labels = np.zeros(sample_count)
@@ -603,44 +601,13 @@ class AudioProcessor(object):
       else:
         input_dict[self.foreground_volume_placeholder_] = 1
       # Run the graph to produce the output audio.
-      #summary, data_tensor = sess.run(
-      #    [self.merged_summaries_, self.output_], feed_dict=input_dict)
-      #self.summary_writer_.add_summary(summary)
-      #data[i - offset, :] = data_tensor.flatten()
-      data[i - offset, :] = sess.run(self.output_, feed_dict=input_dict).flatten()
+      summary, data_tensor = sess.run(
+          [self.merged_summaries_, self.output_], feed_dict=input_dict)
+      self.summary_writer_.add_summary(summary)
+      data[i - offset, :] = data_tensor.flatten()
       label_index = self.word_to_index[sample['label']]
       labels[i - offset] = label_index
-      #labels[i - offset, label_index] = 1
-      print("i={} input_dict={}".format(i, input_dict))
-    print("data={} labels={}".format(data, labels))
     return data, labels
-
-  def get_wav_files(self, how_many, offset, model_settings, mode):
-    """Return wav_file names and labels from train/val/test sets.
-    """
-    # Pick one of the partitions to choose samples from.
-    candidates = self.data_index[mode]
-    if how_many == -1:
-      sample_count = len(candidates)
-    else:
-      sample_count = max(0, min(how_many, len(candidates) - offset))
-    pick_deterministically = (mode != 'training')
-    wav_files = []
-    labels = np.zeros((sample_count, model_settings['label_count']))
-    for i in xrange(offset, offset + sample_count):
-      # Pick which audio sample to use.
-      if how_many == -1 or pick_deterministically:
-        sample_index = i
-      else:
-        sample_index = np.random.randint(len(candidates))
-      sample = candidates[sample_index]
-      if sample['label'] == SILENCE_LABEL:
-        wav_files.append('silence.wav')
-      else:
-        wav_files.append(sample['file'])
-      label_index = self.word_to_index[sample['label']]
-      labels[i - offset, label_index] = 1
-    return wav_files, labels
 
   def get_features_for_wav(self, wav_filename, model_settings, sess):
     """Applies the feature transformation process to the input_wav.
