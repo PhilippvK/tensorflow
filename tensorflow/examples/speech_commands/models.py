@@ -143,6 +143,10 @@ def create_model(fingerprint_input, model_settings, model_architecture,
   elif model_architecture == 'tiny_embedding_conv':
     return create_tiny_embedding_conv_model(fingerprint_input, model_settings,
                                             is_training)
+  elif model_architecture == 'dnn':
+    model_size_info = [128,128,128]
+    return create_dnn_model(fingerprint_input, model_settings, model_size_info,
+                              is_training)
   else:
     raise Exception('model_architecture argument "' + model_architecture +
                     '" not recognized, should be one of "single_fc", "conv",' +
@@ -895,3 +899,41 @@ def create_tiny_embedding_conv_model(fingerprint_input, model_settings,
     return final_fc, dropout_rate
   else:
     return final_fc
+
+def create_dnn_model(fingerprint_input, model_settings, model_size_info, 
+                       is_training):
+  """Builds a model with multiple hidden fully-connected layers.
+  model_size_info: length of the array defines the number of hidden-layers and
+                   each element in the array represent the number of neurons 
+                   in that layer 
+  """
+
+  if is_training:
+    dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
+  fingerprint_size = model_settings['fingerprint_size']
+  label_count = model_settings['label_count']
+  num_layers = len(model_size_info)
+  layer_dim = [fingerprint_size]
+  layer_dim.extend(model_size_info)
+  flow = fingerprint_input
+  tf.summary.histogram('input', flow)
+  for i in range(1, num_layers + 1):
+      with tf.variable_scope('fc'+str(i)):
+          W = tf.get_variable('W', shape=[layer_dim[i-1], layer_dim[i]], 
+                initializer=tf.contrib.layers.xavier_initializer())
+          tf.summary.histogram('fc_'+str(i)+'_w', W)
+          b = tf.get_variable('b', shape=[layer_dim[i]])
+          tf.summary.histogram('fc_'+str(i)+'_b', b)
+          flow = tf.matmul(flow, W) + b
+          flow = tf.nn.relu(flow)
+          if is_training:
+            flow = tf.nn.dropout(flow, dropout_prob)
+
+  weights = tf.get_variable('final_fc', shape=[layer_dim[-1], label_count], 
+              initializer=tf.contrib.layers.xavier_initializer())
+  bias = tf.Variable(tf.zeros([label_count]))
+  logits = tf.matmul(flow, weights) + bias
+  if is_training:
+    return logits, dropout_prob
+  else:
+    return logits
