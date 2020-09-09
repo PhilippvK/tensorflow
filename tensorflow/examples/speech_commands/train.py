@@ -157,13 +157,9 @@ def main(_):
 
   # Create the back propagation and training evaluation machinery in the graph.
   with tf.compat.v1.name_scope('cross_entropy'):
-    cross_entropy_mean = tf.reduce_mean(
-        input_tensor=tf.nn.softmax_cross_entropy_with_logits(
-            labels=tf.stop_gradient(ground_truth_input), logits=logits))
-  tf.compat.v1.summary.scalar('cross_entropy', cross_entropy_mean)
 
-#    cross_entropy_mean = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-#        labels=ground_truth_input, logits=logits)
+    cross_entropy_mean = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+        labels=ground_truth_input, logits=logits)
 
   if FLAGS.quantize:
     try:
@@ -176,10 +172,8 @@ def main(_):
       e.args = (msg,)
       raise e
 
-  update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
-  with tf.compat.v1.name_scope('train'), tf.control_dependencies(update_ops), tf.control_dependencies(control_dependencies):
-  #with tf.compat.v1.name_scope('train'), tf.control_dependencies(
-  #    control_dependencies):
+  with tf.compat.v1.name_scope('train'), tf.control_dependencies(
+      control_dependencies):
     learning_rate_input = tf.compat.v1.placeholder(
         tf.float32, [], name='learning_rate_input')
     if FLAGS.optimizer == 'gradient_descent':
