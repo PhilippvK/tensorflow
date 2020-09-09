@@ -257,8 +257,7 @@ def main(_):
             fingerprint_input: train_fingerprints,
             ground_truth_input: train_ground_truth,
             learning_rate_input: learning_rate_value,
-            dropout_rate: 1.0
-            #dropout_rate: 0.5
+            dropout_rate: 0.5
         }))
     print("-")
     # Run the graph with this batch of training data.
@@ -274,8 +273,7 @@ def main(_):
             fingerprint_input: train_fingerprints,
             ground_truth_input: train_ground_truth,
             learning_rate_input: learning_rate_value,
-            dropout_rate: 1.0
-            #dropout_rate: 0.5
+            dropout_rate: 0.5
         })
     print("-")
     print("train_summary={}, train_accuracy={}, cross_entropy_value={}".format(train_summary, train_accuracy, cross_entropy_value))
