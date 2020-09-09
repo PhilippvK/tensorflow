@@ -198,11 +198,11 @@ def main(_):
   #expected_indices = tf.argmax(input=ground_truth_input, axis=1)
   #correct_prediction = tf.equal(predicted_indices, expected_indices)
   correct_prediction = tf.equal(predicted_indices, ground_truth_input)
-  confusion_matrix = tf.math.confusion_matrix(
-      labels=expected_indices, predictions=predicted_indices, num_classes=label_count)
-  #confusion_matrix = tf.math.confusion_matrix(labels=ground_truth_input,
-  #                                            predictions=predicted_indices,
-  #                                            num_classes=label_count)
+  #confusion_matrix = tf.math.confusion_matrix(
+  #    labels=expected_indices, predictions=predicted_indices, num_classes=label_count)
+  confusion_matrix = tf.math.confusion_matrix(labels=ground_truth_input,
+                                              predictions=predicted_indices,
+                                              num_classes=label_count)
   evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction, tf.float32))
   #evaluation_step = tf.reduce_mean(input_tensor=tf.cast(correct_prediction,
   #                                                      tf.float32))
