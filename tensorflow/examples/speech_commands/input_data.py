@@ -508,6 +508,7 @@ class AudioProcessor(object):
 
   def get_data(self, how_many, offset, model_settings, background_frequency,
                background_volume_range, time_shift, mode, sess):
+    print("get_data(how_many={}, offset={}, model_settings={}, background_frequency={}, background_volume_range={}, time_shift={}, mode={}, sess={})".format(how_many, offset, model_settings, background_frequency, background_volume_range, time_shift, mode, sess))
     """Gather samples from the data set, applying transformations as needed.
 
     When the mode is 'training', a random selection of samples will be returned,
