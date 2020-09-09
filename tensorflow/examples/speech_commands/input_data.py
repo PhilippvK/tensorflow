@@ -550,6 +550,7 @@ class AudioProcessor(object):
     # Use the processing graph we created earlier to repeatedly to generate the
     # final output sample data we'll use in training.
     for i in xrange(offset, offset + sample_count):
+      print("i={}".format(i))
       # Pick which audio sample to use.
       if how_many == -1 or pick_deterministically:
         sample_index = i
@@ -558,7 +559,7 @@ class AudioProcessor(object):
       sample = candidates[sample_index]
       # If we're time shifting, set up the offset for this sample.
       if time_shift > 0:
-        time_shift_amount = np.random.randint(-time_shift, time_shift, dtype=np.int32)
+        time_shift_amount = np.random.randint(-time_shift, time_shift)
       else:
         time_shift_amount = 0
       if time_shift_amount > 0:
@@ -572,6 +573,7 @@ class AudioProcessor(object):
           self.time_shift_padding_placeholder_: time_shift_padding,
           self.time_shift_offset_placeholder_: time_shift_offset,
       }
+      print("input_dict={}".format(input_dict))
       # Choose a section of background noise to mix in.
       if use_background or sample['label'] == SILENCE_LABEL:
         background_index = np.random.randint(len(self.background_data))
@@ -603,12 +605,15 @@ class AudioProcessor(object):
       else:
         input_dict[self.foreground_volume_placeholder_] = 1
       # Run the graph to produce the output audio.
-      summary, data_tensor = sess.run(
-          [self.merged_summaries_, self.output_], feed_dict=input_dict)
-      self.summary_writer_.add_summary(summary)
-      data[i - offset, :] = data_tensor.flatten()
+      #summary, data_tensor = sess.run(
+      #    [self.merged_summaries_, self.output_], feed_dict=input_dict)
+      #self.summary_writer_.add_summary(summary)
+      #data[i - offset, :] = data_tensor.flatten()
+      data[i - offset, :] = sess.run(self.output__, feed_dict=input_dict).flatten()
       label_index = self.word_to_index[sample['label']]
       labels[i - offset] = label_index
+      #labels[i - offset, label_index] = 1
+      print("data={} labels={}".format(data, labels))
     return data, labels
 
   def get_wav_files(self, how_many, offset, model_settings, mode):
