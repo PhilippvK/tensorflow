@@ -914,28 +914,28 @@ def create_dnn_model(fingerprint_input, model_settings, model_size_info,
   """
 
   if is_training:
-    dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
+    dropout_prob = tf.compat.v1.placeholder(tf.float32, name='dropout_prob')
   fingerprint_size = model_settings['fingerprint_size']
   label_count = model_settings['label_count']
   num_layers = len(model_size_info)
   layer_dim = [fingerprint_size]
   layer_dim.extend(model_size_info)
   flow = fingerprint_input
-  tf.summary.histogram('input', flow)
+  tf.compat.v1.summary.histogram('input', flow)
   for i in range(1, num_layers + 1):
-      with tf.variable_scope('fc'+str(i)):
-          W = tf.get_variable('W', shape=[layer_dim[i-1], layer_dim[i]], 
-                initializer=tf.contrib.layers.xavier_initializer())
-          tf.summary.histogram('fc_'+str(i)+'_w', W)
-          b = tf.get_variable('b', shape=[layer_dim[i]])
-          tf.summary.histogram('fc_'+str(i)+'_b', b)
+      with tf.compat.v1.variable_scope('fc'+str(i)):
+          W = tf.compat.v1.get_variable('W', shape=[layer_dim[i-1], layer_dim[i]], 
+                initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
+          tf.compat.v1.summary.histogram('fc_'+str(i)+'_w', W)
+          b = tf.compat.v1.get_variable('b', shape=[layer_dim[i]])
+          tf.compat.v1.summary.histogram('fc_'+str(i)+'_b', b)
           flow = tf.matmul(flow, W) + b
           flow = tf.nn.relu(flow)
           if is_training:
-            flow = tf.nn.dropout(flow, dropout_prob)
+            flow = tf.nn.dropout(flow, 1 - (dropout_prob))
 
-  weights = tf.get_variable('final_fc', shape=[layer_dim[-1], label_count], 
-              initializer=tf.contrib.layers.xavier_initializer())
+  weights = tf.compat.v1.get_variable('final_fc', shape=[layer_dim[-1], label_count], 
+              initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"))
   bias = tf.Variable(tf.zeros([label_count]))
   logits = tf.matmul(flow, weights) + bias
   if is_training:
@@ -966,7 +966,7 @@ def create_ds_cnn_model(fingerprint_input, model_settings, model_size_info,
         [slim.convolution2d, slim.separable_convolution2d],
         weights_initializer=slim.initializers.xavier_initializer(),
         biases_initializer=slim.init_ops.zeros_initializer(),
-        weights_regularizer=slim.l2_regularizer(weight_decay)) as sc:
+        weights_regularizer=tf.keras.regularizers.l2(0.5 * (weight_decay))) as sc:
       return sc
 
   def _depthwise_separable_conv(inputs,
@@ -995,7 +995,7 @@ def create_ds_cnn_model(fingerprint_input, model_settings, model_size_info,
 
 
   if is_training:
-    dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
+    dropout_prob = tf.compat.v1.placeholder(tf.float32, name='dropout_prob')
 
   label_count = model_settings['label_count']
   input_frequency_size = model_settings['fingerprint_width']
@@ -1027,7 +1027,7 @@ def create_ds_cnn_model(fingerprint_input, model_settings, model_size_info,
     i += 1
 
   scope = 'DS-CNN'
-  with tf.variable_scope(scope) as sc:
+  with tf.compat.v1.variable_scope(scope) as sc:
     end_points_collection = sc.name + '_end_points'
     with slim.arg_scope([slim.convolution2d, slim.separable_convolution2d],
                         activation_fn=None,
