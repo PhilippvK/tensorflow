@@ -556,7 +556,7 @@ class AudioProcessor(object):
       sample = candidates[sample_index]
       # If we're time shifting, set up the offset for this sample.
       if time_shift > 0:
-        time_shift_amount = np.random.randint(-time_shift, time_shift)
+        time_shift_amount = np.random.randint(-time_shift, time_shift, dtype=np.int32)
       else:
         time_shift_amount = 0
       if time_shift_amount > 0:
