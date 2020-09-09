@@ -540,6 +540,7 @@ class AudioProcessor(object):
       sample_count = len(candidates)
     else:
       sample_count = max(0, min(how_many, len(candidates) - offset))
+      print("{} = max(0, min({}, {} - {}))".format(sample_count, how_many, len(candidates), offset);
     # Data and labels will be populated and returned.
     data = np.zeros((sample_count, model_settings['fingerprint_size']))
     labels = np.zeros(sample_count)
