@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/stream_executor/tpu/c_api_decl.h"
 #include "tensorflow/stream_executor/tpu/proto_helper.h"
 #include "tensorflow/stream_executor/tpu/status_helper.h"
+#include "tensorflow/stream_executor/tpu/tpu_executable_interface.h"
 #include "tensorflow/stream_executor/tpu/tpu_executor.h"
 #include "tensorflow/stream_executor/tpu/tpu_executor_c_api.h"
 #include "tensorflow/stream_executor/tpu/tpu_platform.h"
@@ -42,7 +43,7 @@ static SE_ExecutableRunOptions ToC(
   se_options.device_ordinal = options.run_options().device_ordinal();
   if (options.run_options().host_to_device_stream() != nullptr) {
     se_options.host_to_device_stream =
-        static_cast<TpuStream*>(
+        static_cast<tensorflow::tpu::TpuStream*>(
             options.run_options().host_to_device_stream()->implementation())
             ->se_stream();
   } else {
@@ -71,7 +72,8 @@ static SE_ExecutableRunOptions ToC(
 
   auto impl =
       const_cast<stream_executor::Stream*>(options.stream())->implementation();
-  se_options.stream = static_cast<TpuStream*>(impl)->se_stream();
+  se_options.stream =
+      static_cast<tensorflow::tpu::TpuStream*>(impl)->se_stream();
   return se_options;
 }
 }  // namespace ApiConverter
@@ -96,11 +98,11 @@ void XLA_HloModuleConfig_Free(XLA_HloModuleConfig* module_config) {
   }
 }
 
-class TpuExecutable : public Executable {
+class TpuExecutable : public TpuExecutableInterface {
  public:
   TpuExecutable(SE_Executable* se_executable,
                 std::shared_ptr<HloModule> hlo_module)
-      : Executable(std::move(hlo_module), nullptr, nullptr),
+      : TpuExecutableInterface(std::move(hlo_module), nullptr, nullptr),
         se_executable_(se_executable) {}
 
   ~TpuExecutable() override {
@@ -121,7 +123,8 @@ class TpuExecutable : public Executable {
       auto* arg_buffers = arg.MutableBuffers();
       absl::InlinedVector<SE_MaybeOwningDeviceMemory, 2> se_buffers;
       for (auto& pair : *arg_buffers) {
-        se_buffers.push_back(ApiConverter::ToC(pair.second));
+        bool aliased = arg.unowned_indices().count(pair.first) > 0;
+        se_buffers.push_back(ApiConverter::ToC(pair.second, aliased));
       }
       se_args[i]->shape_tree.buffers =
           new SE_MaybeOwningDeviceMemory[se_buffers.size()];
@@ -154,10 +157,6 @@ class TpuExecutable : public Executable {
       ApiConverter::Free(&se_args[i]->shape_tree.shape);
       ApiConverter::Free(&se_args[i]->dynamic_shape);
       ApiConverter::Free(&se_args[i]->host_shape);
-
-      for (int j = 0; j < se_args[i]->unowned_indices_size; ++i) {
-        ApiConverter::Free(&se_args[i]->unowned_indices[j]);
-      }
       delete[] se_args[i]->unowned_indices;
       delete[] se_args[i]->shape_tree.buffers;
       delete se_args[i];
@@ -178,6 +177,7 @@ class TpuExecutable : public Executable {
       output.AddAliasedIndex(
           ApiConverter::FromC(&se_execution_output.aliased_indices[i]));
     }
+    ApiConverter::Free(se_execution_output.aliased_indices);
 
     for (int i = 0; i < se_execution_output.to_be_released_size; ++i) {
       output.AddToBeReleased(
@@ -191,7 +191,31 @@ class TpuExecutable : public Executable {
     return output;
   }
 
+  absl::string_view fingerprint() const override {
+    const char* data;
+    size_t size;
+    ExecutorApiFn()->TpuExecutable_FingerprintFn(se_executable_, &data, &size);
+    return absl::string_view(data, size);
+  }
+
  private:
+  Status LoadProgramAndEnqueueToStream(
+      const ServiceExecutableRunOptions& run_options,
+      absl::Span<const stream_executor::DeviceMemoryBase> arguments,
+      stream_executor::DeviceMemoryBase result,
+      absl::optional<stream_executor::DeviceMemoryBase>
+          cross_program_prefetch_addr) override {
+    LOG(FATAL) << "LoadProgramAndEnqueueToStream unimplemented";
+  }
+
+  Shape HostShapeToDeviceShape(const Shape& host_shape) override {
+    LOG(FATAL) << "HostShapeToDeviceShape unimplemented";
+  }
+
+  int64 ShapeSize(const Shape& shape) override {
+    LOG(FATAL) << "ShapeSize unimplemented";
+  }
+
   SE_Executable* se_executable_;
 };
 

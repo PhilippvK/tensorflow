@@ -1,11 +1,15 @@
 # Generates CUDA kernels using MLIR codegen.
 
-load("//tensorflow/core/kernels/mlir_generated:build_defs.bzl", "gen_kernel_library", "if_mlir_generated_gpu_kernels_enabled")
 load(
-    "//tensorflow:tensorflow.bzl",
-    "if_cuda_or_rocm",
-    "tf_kernel_library",
+    "//tensorflow/core/kernels/mlir_generated:build_defs.bzl",
+    "gen_kernel_library",
+    "if_mlir_generated_gpu_kernels_enabled",
 )
+load(
+    "//tensorflow/stream_executor:build_defs.bzl",
+    "if_gpu_is_configured",
+)
+load("//tensorflow:tensorflow.bzl", "tf_kernel_library")
 load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_test")
 load(
     "//tensorflow/core/platform:build_config_root.bzl",
@@ -25,31 +29,32 @@ config_setting(
 )
 
 tf_kernel_library(
-    name = "cwise_op",
-    gpu_srcs = [
-        "cwise_op_gpu_base.cu.cc",
-        "cwise_op_gpu_base.cu.h",
-        "cwise_op_gpu_abs.cu.cc",
-        "cwise_op_gpu_tanh.cu.cc",
-    ],
+    name = "cwise_unary_op",
+    srcs = if_gpu_is_configured([
+        "cwise_op_gpu_abs.cc",
+        "cwise_op_gpu_base.cc",
+        "cwise_op_gpu_base.h",
+        "cwise_op_gpu_tanh.cc",
+    ]),
     tags = ["manual"],
-    deps = if_cuda_or_rocm([
+    deps = [
         ":abs_kernels",
         ":tanh_kernels",
-        "@com_google_absl//absl/strings",
-        "//third_party/eigen3",
-        "@com_google_absl//absl/types:span",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:stream_executor",
-    ]),
+        "//third_party/eigen3",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:span",
+    ],
 )
 
 tf_cuda_cc_test(
     name = "gpu_tanh_test",
     size = "small",
     srcs = if_mlir_generated_gpu_kernels_enabled(["gpu_tanh_test.cc"]),
-    tags = tf_cuda_tests_tags() + ["no_rocm"],
+    tags = tf_cuda_tests_tags(),
     deps = [
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_internal",
@@ -68,7 +73,7 @@ tf_cuda_cc_test(
     name = "gpu_abs_test",
     size = "small",
     srcs = if_mlir_generated_gpu_kernels_enabled(["gpu_abs_test.cc"]),
-    tags = tf_cuda_tests_tags() + ["no_rocm"],
+    tags = tf_cuda_tests_tags(),
     deps = [
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_internal",
