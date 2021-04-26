@@ -32,11 +32,17 @@ constexpr int kInput2Tensor = 1;
 constexpr int kOutputTensor = 0;
 
 struct OpData {
+  int32_t input1_zero_point;
+  int32_t input2_zero_point;
+
   int32_t output_activation_min;
   int32_t output_activation_max;
-
+  int32_t output_zero_point;
   int32_t output_multiplier;
   int output_shift;
+
+  float output_activation_min_f32;
+  float output_activation_max_f32;
 };
 
 TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,

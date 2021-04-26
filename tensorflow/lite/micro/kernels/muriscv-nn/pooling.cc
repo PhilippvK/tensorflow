@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/lite/kernels/internal/reference/pooling.h"
 
-#include "riscv_nnfunctions.hpp"  
+#include "riscv_nnfunctions.hpp"
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/pooling.h"
@@ -37,11 +37,10 @@ constexpr int kOutputTensor = 0;
 
 struct OpData {
   TfLitePaddingValues padding;
-  // Index to buffer for optimizations if applicable.
-  int buffer_idx;
-
   int32_t activation_min;
   int32_t activation_max;
+  float activation_min_f32;
+  float activation_max_f32;
 };
 
 TfLiteStatus CalculateOpData(TfLiteContext* context,
@@ -66,9 +65,6 @@ TfLiteStatus CalculateOpData(TfLiteContext* context,
         &data->activation_max));
     TFLITE_DCHECK_LE(data->activation_min, data->activation_max);
   }
-
-  // Set buffer index to a reset value
-  data->buffer_idx = -1;
 
   return kTfLiteOk;
 }
@@ -154,9 +150,6 @@ void AverageEvalQuantized(TfLiteContext* context, const TfLiteNode* node,
     riscv_nn_context ctx;
     ctx.buf = nullptr;
     ctx.size = 0;
-    if (data.buffer_idx > -1) {
-      ctx.buf = context->GetScratchBuffer(context, data.buffer_idx);
-    }
 
         riscv_avgpool_s8(&ctx, &pool_params, &input_dims,
                        tflite::micro::GetTensorData<int8_t>(input),
@@ -285,25 +278,6 @@ TfLiteStatus AveragePrepare(TfLiteContext* context, TfLiteNode* node) {
 
   TF_LITE_ENSURE_STATUS(CalculateOpData(context, params, input, output, data));
 
-  if (input->type == kTfLiteInt8) {
-    RuntimeShape input_shape = GetTensorShape(input);
-    TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
-
-    RuntimeShape output_shape = GetTensorShape(output);
-    TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 4);
-
-    const int depth = MatchingDim(input_shape, 3, output_shape, 3);
-    const int output_width = output_shape.Dims(2);
-
-    const int32_t buffer_size = 0;
-
-    if (buffer_size > 0) {
-      TF_LITE_ENSURE_STATUS(context->RequestScratchBufferInArena(
-          context, buffer_size, &data->buffer_idx));
-    } else {
-      data->buffer_idx = -1;
-    }
-  }
   return kTfLiteOk;
 }
 

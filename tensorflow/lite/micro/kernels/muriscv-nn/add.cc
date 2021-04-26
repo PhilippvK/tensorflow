@@ -52,6 +52,10 @@ struct OpData {
   int32_t input1_offset;
   int32_t input2_offset;
   int32_t output_offset;
+
+  // Used only for float evals:
+  float output_activation_min_f32;
+  float output_activation_max_f32;
 };
 
 TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteAddParams* params,

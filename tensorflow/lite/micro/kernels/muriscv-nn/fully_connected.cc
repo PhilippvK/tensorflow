@@ -42,8 +42,6 @@ struct OpData {
   int32_t output_activation_max;
   // The index of the temporary tensor where the quantized inputs are cached.
   int input_quantized_index;
-  // Index to buffer for optimizations if applicable.
-  int buffer_idx;
 
   // Cached tensor zero point values for quantized operations.
   int32_t input_zero_point;
@@ -64,7 +62,6 @@ TfLiteStatus CalculateOpData(TfLiteContext* context,
                              OpData* data) {
   TfLiteStatus status = kTfLiteOk;
   // Set buffer index to a reset value
-  data->buffer_idx = -1;
   if (data_type != kTfLiteFloat32) {
     double real_multiplier = 0.0;
     TF_LITE_ENSURE_STATUS(GetQuantizedConvolutionMultipler(
@@ -112,26 +109,6 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                                         input->type, input, filter, bias,
                                         output, data));
 
-  if (input->type == kTfLiteInt8 && nullptr != GetTensorData<int32_t>(bias)) {
-    RuntimeShape filter_shape = GetTensorShape(filter);
-    RuntimeShape output_shape = GetTensorShape(output);
-
-    TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 2);
-    const int filter_dim_count = filter_shape.DimensionsCount();
-    riscv_nn_dims filter_dims;
-    filter_dims.n = filter_shape.Dims(filter_dim_count - 1);
-    filter_dims.h = 1;
-    filter_dims.w = 1;
-    filter_dims.c = output_shape.Dims(1);
-
-    const int32_t buf_size = 0;
-    if (buf_size > 0) {
-      TF_LITE_ENSURE_STATUS(context->RequestScratchBufferInArena(
-          context, buf_size, &data->buffer_idx));
-    } else {
-      data->buffer_idx = -1;
-    }
-  }
   return kTfLiteOk;
 }
 
@@ -167,9 +144,9 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 
     riscv_nn_dims input_dims;
     input_dims.n = batches;
-    input_dims.h = input_shape.Dims(1);
-    input_dims.w = input_shape.Dims(1);
-    input_dims.c = 1;
+    input_dims.h = 1;
+    input_dims.w = 1;
+    input_dims.c = accum_depth;
 
     riscv_nn_dims filter_dims;
     filter_dims.n = accum_depth;
@@ -192,10 +169,6 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
     riscv_nn_context ctx;
     ctx.buf = nullptr;
     ctx.size = 0;
-
-    if (data.buffer_idx > -1) {
-      ctx.buf = context->GetScratchBuffer(context, data.buffer_idx);
-    }
 
         riscv_fully_connected_s8(
             &ctx, &fc_params, &quant_params, &input_dims,
