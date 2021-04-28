@@ -201,10 +201,9 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 
 }  // namespace add
 
-TfLiteRegistration* Register_ADD() {
-  static TfLiteRegistration r = {nullptr /* Init */, nullptr /* Free */,
-                                 nullptr /* Prepare */, add::Eval};
-  return &r;
+TfLiteRegistration Register_ADD() {
+  return {nullptr /* Init */, nullptr /* Free */,
+          nullptr /* Prepare */, add::Eval};
 }
 
 }  // namespace micro
