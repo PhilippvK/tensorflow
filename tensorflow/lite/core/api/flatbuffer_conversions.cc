@@ -131,7 +131,7 @@ TfLitePadding ConvertPadding(Padding padding) {
   return kTfLitePaddingUnknown;
 }
 
-#ifndef TF_LITE_STATIC_MEMORY
+#if ! defined(TF_LITE_STATIC_MEMORY) || defined(TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT)
 TfLiteStatus ParseOpDataTfLite(const Operator* op, BuiltinOperator op_type,
                                ErrorReporter* error_reporter,
                                BuiltinDataAllocator* allocator,
@@ -824,7 +824,7 @@ TfLiteStatus ParseOpDataTfLite(const Operator* op, BuiltinOperator op_type,
   }
   return kTfLiteError;
 }  // NOLINT[readability/fn_size]
-#endif  // !defined(TF_LITE_STATIC_MEMORY)
+#endif  // ! defined(TF_LITE_STATIC_MEMORY) || defined(TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT)
 }  // namespace
 
 TfLiteStatus ConvertTensorType(TensorType tensor_type, TfLiteType* type,
@@ -1748,7 +1748,7 @@ TfLiteStatus ParseOpData(const Operator* op, BuiltinOperator op_type,
 //  * If all the builtin operators were to have their own parse functions, or we
 //    were ok with some amount of code duplication, then this split of the .cc
 //    files would be a lot more feasible.
-#ifdef TF_LITE_STATIC_MEMORY
+#if defined(TF_LITE_STATIC_MEMORY) && !defined(TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT)
   TF_LITE_REPORT_ERROR(
       error_reporter,
       "ParseOpData is unsupported on TfLiteMicro, please use the operator "
